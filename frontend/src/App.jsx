@@ -1,6 +1,7 @@
 import { HashRouter, ParamsProvider, match, useLocation } from './router.jsx';
 import { AuthProvider, useAuth } from './store/Auth.jsx';
 import { StoreProvider } from './store/Store.jsx';
+import { BusinessDataProvider } from './store/BusinessData.jsx';
 import Layout from './components/Layout.jsx';
 import Login from './pages/Login.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -51,9 +52,11 @@ export default function App() {
   return (
     <StoreProvider>
       <AuthProvider>
-        <HashRouter>
-          <Routed />
-        </HashRouter>
+        <BusinessDataProvider>
+          <HashRouter>
+            <Routed />
+          </HashRouter>
+        </BusinessDataProvider>
       </AuthProvider>
     </StoreProvider>
   );

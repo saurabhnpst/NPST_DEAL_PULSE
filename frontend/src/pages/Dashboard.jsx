@@ -2,7 +2,8 @@ import { useNavigate } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, dealValue, toCr, weighted } from '../store/Store.jsx';
 import { OPEN_STAGES } from '../data/defaults.js';
-import { TEAM } from '../data/seed.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import { Badge, Kpi } from '../components/ui.jsx';
 
 function greeting() {
@@ -13,8 +14,10 @@ function greeting() {
 export default function Dashboard() {
   const { vertical, user } = useAuth();
   const { state } = useStore();
+  const { leadsLoading, leadsError, oppsLoading, oppsError, rfpsLoading, approvalsLoading, reloadAll } = useBusinessData();
   const nav = useNavigate();
-  const { leads, opportunities: opps, synopses, decisions, compliance, evaluations } = state;
+  const { leads, opportunities: opps, synopses, rfps, apiApprovals, decisions, compliance, evaluations } = state;
+  const teamOwners = Array.from(new Set(opps.map((o) => o.owner).filter((n) => n && n !== '—')));
 
   const open = opps.filter((o) => OPEN_STAGES.includes(o.stage));
   const pipeline = open.reduce((s, o) => s + dealValue(o), 0);
@@ -32,6 +35,10 @@ export default function Dashboard() {
   let kpis = [];
   let todo = [];
   const k = vertical.key;
+  const dataLoading = leadsLoading || oppsLoading || rfpsLoading || approvalsLoading;
+  if (dataLoading && !leads.length && !opps.length) {
+    return <LoadingPanel label="Loading dashboard…" />;
+  }
   if (k === 'sales') {
     // Sales rep: own pipeline, recommendations waiting on the P&L Head, outcomes to act on
     const mineOpen = open.filter((o) => o.owner === user.name);
@@ -82,12 +89,31 @@ export default function Dashboard() {
     todo = [
       ...subm.map((s) => ({ kind: 'Synopsis', t: `Review synopsis: ${s.name}`, s: `${s.account} · bid due ${s.due}`, to: '/rfp', tone: 'blue' })),
       ...active.slice(0, 4).map((e) => ({ kind: e.type, t: `${e.name}: ${e.next}`, s: oppName(e.oppId), to: '/pre-po', tone: 'gray' })),
-      ...(pend.length ? [{ kind: 'Compliance', t: `${pend.length} items waiting for expert review`, s: 'Meridian Bank · UPI Switch RFP', to: '/compliance', tone: 'amber' }] : [])
+      ...(pend.length ? [{ kind: 'Compliance', t: `${pend.length} items waiting for expert review`, s: 'Open compliance workspace', to: '/compliance', tone: 'amber' }] : [])
     ];
+  }
+
+  const loading = (leadsLoading || oppsLoading) && !leads.length && !opps.length;
+  const fatal = (leadsError || oppsError) && !leads.length && !opps.length;
+  if (loading) return <LoadingPanel label="Loading dashboard…" />;
+  if (fatal) {
+    return (
+      <ErrorPanel
+        title="Dashboard data unavailable"
+        message={leadsError?.message || oppsError?.message}
+        onRetry={reloadAll}
+      />
+    );
   }
 
   return (
     <>
+      {(leadsError || oppsError) && (
+        <p className="banner s13" role="status">
+          Some dashboard figures may be incomplete.
+          <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={reloadAll}>Retry</button>
+        </p>
+      )}
       <div className="row wrap between gap16" style={{ alignItems: 'flex-end' }}>
         <div>
           <h1 className="h1">{greeting()}, {user.name.split(' ')[0]}</h1>
@@ -127,26 +153,30 @@ export default function Dashboard() {
       {k === 'pl' && (
         <section className="panel col gap10">
           <h2 className="h2">Team</h2>
-          <div style={{ overflowX: 'auto' }}>
-            <table>
-              <thead><tr><th>Owner</th><th>Open leads</th><th>Open deals</th><th>Pipeline</th><th>Weighted</th><th>Won</th></tr></thead>
-              <tbody>
-                {TEAM.map((n) => {
-                  const mine = open.filter((o) => o.owner === n);
-                  return (
-                    <tr key={n}>
-                      <td className="w500">{n}</td>
-                      <td className="mono">{openLeads.filter((l) => l.owner === n).length}</td>
-                      <td className="mono">{mine.length}</td>
-                      <td className="mono">₹{toCr(mine.reduce((a, o) => a + dealValue(o), 0))} Cr</td>
-                      <td className="mono">₹{toCr(mine.reduce((a, o) => a + weighted(o), 0))} Cr</td>
-                      <td className="mono">₹{toCr(won.filter((o) => o.owner === n).reduce((a, o) => a + dealValue(o), 0))} Cr</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          {teamOwners.length === 0 ? (
+            <p className="muted s14">No opportunity owners in the loaded pipeline. Team rollup requires owner data from the opportunity API.</p>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table>
+                <thead><tr><th>Owner</th><th>Open leads</th><th>Open deals</th><th>Pipeline</th><th>Weighted</th><th>Won</th></tr></thead>
+                <tbody>
+                  {teamOwners.map((n) => {
+                    const mine = open.filter((o) => o.owner === n);
+                    return (
+                      <tr key={n}>
+                        <td className="w500">{n}</td>
+                        <td className="mono">{openLeads.filter((l) => l.owner === n).length}</td>
+                        <td className="mono">{mine.length}</td>
+                        <td className="mono">₹{toCr(mine.reduce((a, o) => a + dealValue(o), 0))} Cr</td>
+                        <td className="mono">₹{toCr(mine.reduce((a, o) => a + weighted(o), 0))} Cr</td>
+                        <td className="mono">₹{toCr(won.filter((o) => o.owner === n).reduce((a, o) => a + dealValue(o), 0))} Cr</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
     </>

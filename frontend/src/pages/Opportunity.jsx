@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, dealValue, inr, category, fmtDate, stamp } from '../store/Store.jsx';
+import { opportunityService } from '../services/opportunityService.js';
+import { apiOpportunityToUi } from '../mappers/opportunityMapper.js';
+import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import {
   stageMeta, OPEN_STAGES, PRODUCTS, PRODUCTS_2_4, MODULES, OPP_TYPES, TERRITORIES, LOST_REASONS, LEAD_SOURCES, OVERRIDE_REASONS, HOLD_REASONS, plusDays,
   REGIONS, BUSINESS_TYPES, TENDER_TYPES, COMPETITORS, INDUSTRIES, SUB_INDUSTRIES, ACCOUNT_SIZES, HOSTING, SOLUTION_TYPES, SERVICE_MODELS, PRODUCT_OWNERS,
@@ -9,8 +12,7 @@ import {
 } from '../data/defaults.js';
 import { MERCHANT_CATEGORIES } from '../data/merchantCategories.js';
 import { useTeams, TeamsBadge } from '../components/Teams.jsx';
-import { TEAM, PRESALES } from '../data/seed.js';
-import { withExtras } from '../data/oppExtras.js';
+import { ownerOptions, PRESALES_OPTIONS } from '../data/peopleOptions.js';
 import { Badge, ReadOnlyNote, Stepper, Tabs, Timeline, Toast, Modal, MultiPick } from '../components/ui.jsx';
 
 const EARLY_STAGES = ['Qualification', 'Needs Analysis', 'Impact Analysis', 'Proposal'];
@@ -20,8 +22,7 @@ const stageTasksFor = (opp) => opp.tasks.filter((t) => (t.stage || opp.stage) ==
 
 const TABS = ['Details', 'Pre-PO evaluation', 'RFP & compliance', 'Proposal & decision', 'Commercials & PO', 'Documents', 'History'];
 const TSP = ['—', ...PRODUCTS_2_4];
-const INTERNAL = ['Priya S.', 'Arjun K.', 'Meera D.', 'Pushkar B.', 'Vikram N.', 'Sneha G.', 'K. Rao'];
-const REVIEWERS = ['Legal · N. Shah', 'Finance · K. Rao', 'Compliance · R. Iyer', 'Security · A. Menon'];
+const REVIEWER_ROLES = ['Legal', 'Finance', 'Compliance', 'Security'];
 const short = (iso) => (iso ? new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : '—');
 const uid = () => Math.random().toString(36).slice(2, 8);
 
@@ -45,7 +46,7 @@ const tcv = (v) => amountFirstYear(v) + num(v.year2) + num(v.year3) + num(v.year
 // Sections and fields follow "Opportunity Information.docx" / "Opportunity Fields.xlsx".
 const GROUPS = [
   { name: 'Opportunity information', always: true, fields: [
-    T('name', 'Opportunity Name', { req: 1, note: 'Defaults to Company_Product on conversion' }), S('owner', 'Opportunity Owner', TEAM, { req: 1 }),
+    T('name', 'Opportunity Name', { req: 1, note: 'Defaults to Company_Product on conversion' }), S('owner', 'Opportunity Owner', ['—'], { req: 1 }),
     T('account', 'Account Name', { req: 1 }), R('_recordType', 'Opportunity Record Type'),
     R('_forecast', 'Forecast Category', { note: 'Set by stage' }), R('_stage', 'Stage', { note: 'Moved with “Save & proceed”' }),
     S('leadSource', 'Lead Source', LEAD_SOURCES, { note: 'Carried from the lead' }), D('closeDate', 'Close Date', { req: 1 }),
@@ -55,7 +56,7 @@ const GROUPS = [
     N('yearlyVolumeProjection', 'Yearly Volume Projection', { plain: 1 }), D('projectStartExpected', 'Project Start Date (Expected)'),
     T('spocFirstName', 'SPOC First Name'), D('firstBillingExpected', 'First Billing Date(Expected)'),
     T('spocLastName', 'SPOC Last Name'), R('_prob', 'Probability (%)', { note: 'Set by stage' }),
-    S('businessType', 'Type', BUSINESS_TYPES), S('presales', 'Pre-Sales owner', PRESALES),
+    S('businessType', 'Type', BUSINESS_TYPES), S('presales', 'Pre-Sales owner', PRESALES_OPTIONS),
     S('territory', 'Territory', TERRITORIES), R('convertedFrom', 'Converted from lead')
   ] },
   { name: 'Industry information', always: true, fields: [
@@ -133,7 +134,26 @@ export default function Opportunity() {
   const { user, can, readOnly } = useAuth();
   const { state, dispatch } = useStore();
   const nav = useNavigate();
-  const raw = state.opportunities.find((o) => o.id === id);
+  const raw = state.opportunities.find((o) => o.id === id || o._apiId === id);
+  const [oppFetch, setOppFetch] = useState({ loading: false, error: null });
+
+  useEffect(() => {
+    if (raw || !id) return;
+    let cancelled = false;
+    (async () => {
+      setOppFetch({ loading: true, error: null });
+      try {
+        const row = await opportunityService.get(id);
+        if (cancelled) return;
+        const ui = apiOpportunityToUi(row);
+        dispatch({ type: 'SET_OPPORTUNITIES', opportunities: [...state.opportunities, ui] });
+        setOppFetch({ loading: false, error: null });
+      } catch (e) {
+        if (!cancelled) setOppFetch({ loading: false, error: e });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, raw, dispatch, state.opportunities]);
   const [tab, setTab] = useState('Details');
   const [form, setForm] = useState(null); // non-null while editing Details
   const [toast, setToast] = useState('');
@@ -142,9 +162,25 @@ export default function Opportunity() {
   const topRef = useRef(null);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3200); return () => clearTimeout(t); }, [toast]);
-  if (!raw) return <div className="panel empty"><h1 className="h1">Opportunity not found</h1><Link to="/opportunities">Back to opportunities</Link></div>;
+  if (oppFetch.loading) return <LoadingPanel label="Loading opportunity…" />;
+  if (oppFetch.error) {
+    return <ErrorPanel title="Opportunity unavailable" message={oppFetch.error.message} onRetry={() => setOppFetch({ loading: false, error: null })} />;
+  }
+  if (!raw) return <div className="panel empty"><h1 className="h1">Opportunity not found</h1><p className="muted s14">No opportunity with this ID in the API.</p><Link to="/opportunities">Back to opportunities</Link></div>;
 
-  const opp = withExtras(raw);
+  const owners = ownerOptions(user);
+  const opp = {
+    tasks: [],
+    dealTeam: [],
+    deliverables: [],
+    documents: [],
+    commercials: [],
+    logs: [],
+    people: [],
+    evaluations: [],
+    fy27Q1: 0,
+    ...raw,
+  };
   const inBand = opp.skipPresales
     ? !!can.editOppLate // non-RFP deal: Sales owns every stage (Qualification → Negotiation); Pre-Sales / Solution can't edit
     : (can.editOppEarly && EARLY_STAGES.includes(opp.stage)) || (can.editOppLate && LATE_STAGES.includes(opp.stage));
@@ -520,11 +556,11 @@ function PrePoTab({ opp, canEdit, say }) {
 
   const newEval = () => {
     const id = `EVAL-${new Date().getFullYear()}-${String(state.seq.eval + 1).padStart(3, '0')}`;
-    dispatch({ type: 'ADD_EVAL', ev: { name: `${opp.productTsp} PoC`, oppId: opp.id, type: 'PoC', sales: opp.owner, solution: opp.presales !== '—' ? opp.presales : 'Vikram N.', tech: 'Sneha G.', approval: 'Pending',
+    dispatch({ type: 'ADD_EVAL', ev: { name: `${opp.productTsp} PoC`, oppId: opp.id, type: 'PoC', sales: opp.owner, solution: opp.presales !== '—' ? opp.presales : user.name, tech: '—', approval: 'Pending',
       start: plusDays(7), target: plusDays(37), submitted: '', status: 'Not Started', next: 'Approval by Pre-Sales Mgr', effort: 0, cost: 0, expectedPo: fmtDate(opp.closeDate), scope: '', deliverables: [] }, who: user.name });
-    const sol = opp.presales !== '—' ? opp.presales : 'Vikram N.';
+    const sol = opp.presales !== '—' ? opp.presales : user.name;
     teams(sol, `New PoC evaluation ${id} created for ${opp.name} (${opp.account}). You are the Solution owner — please review and approve.`, { kind: 'PoC', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
-    teams('Sneha G.', `You are the Tech owner on PoC ${id} for ${opp.name} (${opp.account}).`, { kind: 'PoC', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
+    teams(user.name, `You are the Tech owner on PoC ${id} for ${opp.name} (${opp.account}).`, { kind: 'PoC', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
     setSelId(id); say('New evaluation created · Solution and Tech owners notified on Teams');
   };
   const saveEval = () => { dispatch({ type: 'UPDATE_EVAL', id: ev.id, patch: { ...ev, effort: Number(ev.effort) || 0, cost: Number(String(ev.cost).replace(/,/g, '')) || 0 } }); say('Saved · change recorded in History'); };
@@ -554,9 +590,9 @@ function PrePoTab({ opp, canEdit, say }) {
             <label className="fl">Evaluation type *<select className="in" disabled={ro} value={ev.type} onChange={f('type')}><option>PoC</option><option>Demo</option><option>Pilot</option><option>Customization</option></select></label>
             <label className="fl">Status *<select className="in" disabled={ro} value={ev.status} onChange={f('status')}>{EVAL_STATUSES.map((s) => <option key={s}>{s}</option>)}</select></label>
             <label className="fl">Approval status<select className="in" disabled={ro} value={ev.approval} onChange={f('approval')}><option>Approved</option><option>Pending</option></select>{ev.approval === 'Approved' && <span className="note">Pre-Sales Mgr</span>}</label>
-            <label className="fl">Sales owner *<select className="in" disabled={ro} value={ev.sales} onChange={f('sales')}>{TEAM.map((t) => <option key={t}>{t}</option>)}</select></label>
-            <label className="fl">Solution owner<select className="in" disabled={ro} value={ev.solution || 'Vikram N.'} onChange={f('solution')}>{PRESALES.slice(1).map((t) => <option key={t}>{t}</option>)}</select></label>
-            <label className="fl">Technical owner *<select className="in" disabled={ro} value={ev.tech} onChange={f('tech')}>{['—', ...PRESALES.slice(1)].map((t) => <option key={t}>{t}</option>)}</select></label>
+            <label className="fl">Sales owner *<select className="in" disabled={ro} value={ev.sales} onChange={f('sales')}>{owners.map((t) => <option key={t}>{t}</option>)}</select></label>
+            <label className="fl">Solution owner<select className="in" disabled={ro} value={ev.solution || '—'} onChange={f('solution')}>{PRESALES_OPTIONS.map((t) => <option key={t}>{t}</option>)}</select></label>
+            <label className="fl">Technical owner *<select className="in" disabled={ro} value={ev.tech} onChange={f('tech')}>{PRESALES_OPTIONS.map((t) => <option key={t}>{t}</option>)}</select></label>
             <label className="fl">Start date *<input className="in" type="date" readOnly={ro} value={ev.start || ''} onChange={f('start')} /></label>
             <label className="fl">Target completion *<input className="in" type="date" readOnly={ro} value={ev.target || ''} onChange={f('target')} /></label>
             <label className="fl">Submitted to bank<input className="in" type="date" readOnly={ro} value={ev.submitted || ''} onChange={f('submitted')} /></label>
@@ -571,11 +607,11 @@ function PrePoTab({ opp, canEdit, say }) {
       </section>
 
       <section className="panel col gap10">
-        <div className="row between"><h2 className="h2">Deliverables</h2>{canEdit && !addDl && <button className="btn" onClick={() => setAddDl({ t: '', o: sel.tech !== '—' ? sel.tech : 'Sneha G.', due: plusDays(7), e: 2, s: 'Not started' })}>+ Add deliverable</button>}</div>
+        <div className="row between"><h2 className="h2">Deliverables</h2>{canEdit && !addDl && <button className="btn" onClick={() => setAddDl({ t: '', o: sel.tech !== '—' ? sel.tech : user.name, due: plusDays(7), e: 2, s: 'Not started' })}>+ Add deliverable</button>}</div>
         {addDl && (
           <div className="grid3" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
             <label className="fl">Deliverable *<input className="in" value={addDl.t} onChange={(e) => setAddDl({ ...addDl, t: e.target.value })} /></label>
-            <label className="fl">Owner<select className="in" value={addDl.o} onChange={(e) => setAddDl({ ...addDl, o: e.target.value })}>{PRESALES.slice(1).map((p) => <option key={p}>{p}</option>)}</select></label>
+            <label className="fl">Owner<select className="in" value={addDl.o} onChange={(e) => setAddDl({ ...addDl, o: e.target.value })}>{PRESALES_OPTIONS.map((p) => <option key={p}>{p}</option>)}</select></label>
             <label className="fl">Due<input className="in" type="date" value={addDl.due} onChange={(e) => setAddDl({ ...addDl, due: e.target.value })} /></label>
             <label className="fl">Effort (days)<input className="in" type="number" value={addDl.e} onChange={(e) => setAddDl({ ...addDl, e: Number(e.target.value) })} /></label>
             <div className="row gap8" style={{ alignSelf: 'end' }}>
@@ -689,14 +725,14 @@ function DecisionTab({ opp, canEdit, patch, say }) {
           <h2 className="h2">Proposal and internal reviews</h2>
           {canEdit && <div className="row gap8">
             <button className="btn" onClick={() => setForm({ mode: 'upload', doc: docNames[0] })}>+ Upload version</button>
-            <button className="btn" onClick={() => setForm({ mode: 'assign', doc: docNames[0], reviewer: REVIEWERS[0], due: plusDays(3) })}>+ Assign reviewer</button>
+            <button className="btn" onClick={() => setForm({ mode: 'assign', doc: docNames[0], reviewer: REVIEWER_ROLES[0], due: plusDays(3) })}>+ Assign reviewer</button>
           </div>}
         </div>
         {form && (
           <div className="grid3" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
             <label className="fl">Document *<input className="in" list="docnames" value={form.doc} onChange={(e) => setForm({ ...form, doc: e.target.value })} /><datalist id="docnames">{docNames.map((d) => <option key={d} value={d} />)}</datalist></label>
             {form.mode === 'assign' && <>
-              <label className="fl">Reviewer *<select className="in" value={form.reviewer} onChange={(e) => setForm({ ...form, reviewer: e.target.value })}>{REVIEWERS.map((r) => <option key={r}>{r}</option>)}</select></label>
+              <label className="fl">Reviewer *<select className="in" value={form.reviewer} onChange={(e) => setForm({ ...form, reviewer: e.target.value })}>{REVIEWER_ROLES.map((r) => <option key={r}>{r}</option>)}</select></label>
               <label className="fl">Due *<input className="in" type="date" value={form.due} onChange={(e) => setForm({ ...form, due: e.target.value })} /></label>
             </>}
             {form.mode === 'upload' && <label className="fl">File<input className="in" type="file" style={{ paddingTop: 8 }} /><span className="note">Uploading a new version supersedes the current review.</span></label>}
@@ -943,7 +979,7 @@ function SidePanels({ opp, canEdit, patch }) {
             <input className="in" placeholder="Task" aria-label="Task" value={task.t} onChange={(e) => setTask({ ...task, t: e.target.value })} />
             <div className="row gap8">
               <input className="in" type="date" aria-label="Due" value={task.due} onChange={(e) => setTask({ ...task, due: e.target.value })} />
-              <select className="in" aria-label="Owner" value={task.o} onChange={(e) => setTask({ ...task, o: e.target.value })}>{[...TEAM, ...PRESALES.slice(1)].map((p) => <option key={p}>{p}</option>)}</select>
+              <select className="in" aria-label="Owner" value={task.o} onChange={(e) => setTask({ ...task, o: e.target.value })}>{[...owners, ...PRESALES_OPTIONS].map((p) => <option key={p}>{p}</option>)}</select>
             </div>
             <div className="row gap8"><button className="btn-p" disabled={!task.t} onClick={() => {
               const m = teams(task.o, `New task assigned to you on ${opp.name} (${opp.account}): “${task.t}” — due ${short(task.due)}.`, { kind: 'Task', ctx, link });
@@ -953,7 +989,7 @@ function SidePanels({ opp, canEdit, patch }) {
             <span className="s12" style={{ color: '#3D44A8' }}>{task.o} will get a Microsoft Teams message about this task.</span>
           </div>
         )}
-        {canEdit && !task && <button className="btn" style={{ marginTop: 12, alignSelf: 'flex-start' }} onClick={() => setTask({ t: '', due: plusDays(3), o: TEAM.includes(user.name) || PRESALES.includes(user.name) ? user.name : opp.owner })}>+ New task</button>}
+        {canEdit && !task && <button className="btn" style={{ marginTop: 12, alignSelf: 'flex-start' }} onClick={() => setTask({ t: '', due: plusDays(3), o: user.name || opp.owner })}>+ New task</button>}
         {done.length > 0 && (
           <details style={{ marginTop: 10 }}>
             <summary className="s13 muted" style={{ cursor: 'pointer' }}>{done.length} completed</summary>
@@ -968,11 +1004,10 @@ function SidePanels({ opp, canEdit, patch }) {
         {person && (
           <div className="col gap8">
             <input className="in" placeholder="Name" aria-label="Name" list="dp-people" value={person.n} onChange={(e) => setPerson({ ...person, n: e.target.value })} />
-            <datalist id="dp-people">{INTERNAL.map((n) => <option key={n} value={n} />)}</datalist>
-            {INTERNAL.includes(person.n.trim()) && <span className="s12" style={{ color: '#3D44A8' }}>{person.n.trim()} will get a Teams message.</span>}
+            <datalist id="dp-people">{owners.map((n) => <option key={n} value={n} />)}</datalist>
             <input className="in" placeholder="Role, e.g. Bank · CIO" aria-label="Role" value={person.r} onChange={(e) => setPerson({ ...person, r: e.target.value })} />
             <div className="row gap8"><button className="btn-p" disabled={!person.n} onClick={() => {
-              const internal = INTERNAL.includes(person.n.trim());
+              const internal = owners.includes(person.n.trim());
               const m = internal ? teams(person.n.trim(), `You were added to the deal team for ${opp.name} (${opp.account})${person.r ? ' as ' + person.r : ''}.`, { kind: 'Deal team', ctx, link }) : null;
               patch({ people: [...opp.people, { ...person, teamsAt: m?.time }] }, 'Added ' + person.n + (m ? ' · Teams message sent' : ''));
               setPerson(null);

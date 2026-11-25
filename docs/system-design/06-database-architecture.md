@@ -1,63 +1,58 @@
 # Database Architecture
 
-Analysis from **entities and migrations in source** only. Row counts and live schema on Aiven are **NOT VERIFIED** in this documentation pass (see consolidation doc for historical merge facts).
+Schema derived from **migrations and entities in source** only. Live managed MySQL (e.g. Aiven) alignment is **NOT VERIFIED** in this pass.
 
-## Ownership (target)
+## Database ownership
 
-| Database | Owning service | Migrations in repo | ORM |
-|----------|----------------|-------------------|-----|
-| `lead_db` | Lead Service | Yes (1) | TypeORM |
-| `document_db` | Document Service | Yes (2) | TypeORM |
-| `rfp_db` | RFP Service | Yes (5) | TypeORM |
-| `opportunity_db` | Opportunity | **No** | Planned |
-| `approval_db` | Approval | **No** | Planned |
-| `assignment_db` | Assignment | **No** | Planned |
-| `compliance_db` | Compliance | **No** | Planned |
-| `iam_db` | Command Module (Postgres, external) | N/A | External |
+| Database | Service | Migrations in repo | Runtime ORM |
+|----------|---------|-------------------|-------------|
+| `lead_db` | Lead | Yes (`InitialLeadSchema`) | TypeORM |
+| `opportunity_db` | Opportunity | Yes (`OpportunitySchema`) | TypeORM |
+| `rfp_db` | RFP | Yes (5 files) | TypeORM |
+| `document_db` | Document | Yes (2 files) | TypeORM |
+| `approval_db` | Approval | Yes (`InitialApprovalSchema`) | Migrations only; **runtime in-memory** |
+| `assignment_db` | Assignment | Yes (`AssignmentSchema`) | TypeORM |
+| `compliance_db` | Compliance | Yes (`InitialComplianceSchema`) | TypeORM |
+| `iam_db` | Command Module | External (Postgres) | N/A |
 
-**Obsolete:** `dealplus_documents` — removed per `docs/database/document-db-consolidation.md`; configs now use `document_db`.
+Local bootstrap: `docker/mysql/init-databases.sql` creates all seven MySQL databases and grants `dealplus` user.
 
-**No cross-database FKs** (architectural rule in `ownership.md`). Cross-service links use UUID columns (`lead_id`, `opportunity_id`, `document_id`) validated via APIs.
+**Rule:** No cross-database foreign keys. References to other services use UUID/string columns validated via HTTP.
 
-## document_db (Document Service)
+## Per-service schema (summary)
 
-### Tables (from migrations + entities)
+### lead_db
 
-| Table | PK | FKs |
-|-------|----|----|
-| `documents` | `id` UUID | — |
-| `document_versions` | `id` UUID | `documentId` → `documents.id` CASCADE |
-| `document_attachments` | `id` UUID | `documentId` → `documents.id` CASCADE |
-| `migrations` | TypeORM | — |
+- **Tables:** `leads`, `lead_qualifications`, `lead_history` (+ TypeORM migrations table).
 
-Notable columns on `documents`: `storageKey` (unique), `leadId` (legacy), `currentVersionNumber`, `checksumSha256`.
+### opportunity_db
 
-## lead_db (Lead Service)
+- **Entities:** `opportunity`, stage history, products, commercials, activities, domain events, public id sequence (see `apps/opportunity-service/src/entities/`).
 
-| Table | PK | Relationships |
-|-------|----|----------------|
-| `leads` | UUID | 1:1 qualification, 1:N history |
-| `lead_qualifications` | UUID | → lead |
-| `lead_history` | UUID | → lead |
+### document_db
 
-Large column set on `leads` (company, addresses, workflow fields) per `lead.entity.ts`.
+- **Tables:** `documents`, `document_versions`, `document_attachments`.
 
-## rfp_db (RFP Service)
+### rfp_db
 
-| Table / entity | Purpose |
-|----------------|---------|
-| `rfps` | Core RFP; optional `lead_id`, `opportunity_id`, `document_id` |
-| `rfp_document_associations` | Links RFP ↔ document UUIDs |
-| `rfp_document_versions` | Version tracking |
-| `rfp_pdf_processing_jobs`, `rfp_pdf_page_text` | PDF pipeline |
-| `rfp_information_extraction_jobs` | Extraction jobs |
-| `rfp_extracted_fields`, `rfp_field_mapping_config` | Extracted data |
-| `rfp_field_review_audit` | Review audit |
-| `rfp_amendment_*` | Amendment comparison |
+- **Tables:** `rfps`, document associations/versions, PDF jobs/page text, extraction jobs/fields, field mapping, review audit, amendment comparison/diffs.
 
-FKs are **within rfp_db** only (see migration files).
+### assignment_db
 
-## ER diagram (verified relationships only)
+- **Entities:** technical assignments, RFP requirements, presales handoffs, product tech leads, assignment history, domain events (see `apps/assignment-service/src/entities/`).
+
+### compliance_db
+
+- **Domain:** frameworks, requirements, configurations, assessments, matrix entries, evidence refs, reviews, sign-offs (see compliance migrations SQL/TS).
+
+### approval_db
+
+- **Migrations define:** `approval_request`, `decision`, `approval_history_event` (names per migration file).
+- **Runtime:** Approval service uses **in-memory** maps, not these tables, until repository implementation switches to TypeORM.
+
+## ER diagram (logical cross-service links)
+
+Physical FKs exist **within** each database only. Dashed lines are **logical** references (UUID columns).
 
 ```mermaid
 erDiagram
@@ -67,67 +62,39 @@ erDiagram
   DOCUMENTS ||--o{ DOCUMENT_VERSIONS : has
   DOCUMENTS ||--o{ DOCUMENT_ATTACHMENTS : links
 
-  RFPS ||--o{ RFP_DOCUMENT_ASSOCIATIONS : associates
-  RFPS ||--o{ RFP_PDF_PROCESSING_JOBS : processes
-  RFPS ||--o{ RFP_INFORMATION_EXTRACTION_JOBS : extracts
+  OPPORTUNITIES ||--o{ OPPORTUNITY_STAGE_HISTORY : stages
+  OPPORTUNITIES ||--o{ OPPORTUNITY_PRODUCTS : products
 
-  DOCUMENT_ATTACHMENTS }o..o| LEADS : "entityId optional UUID"
-  RFPS }o..o| LEADS : "lead_id no FK"
-  RFPS }o..o| OPPORTUNITIES : "opportunity_id logical"
-  RFPS }o..o| DOCUMENTS : "document_id logical"
+  RFPS ||--o{ RFP_DOCUMENT_ASSOCIATIONS : links
+  RFPS ||--o{ RFP_PDF_PROCESSING_JOBS : jobs
+  RFPS ||--o{ RFP_EXTRACTED_FIELDS : fields
 
-  LEADS {
-    uuid id PK
-    string status
-    string email
-  }
-  LEAD_QUALIFICATIONS {
-    uuid id PK
-    uuid lead_id FK
-  }
-  LEAD_HISTORY {
-    uuid id PK
-    uuid lead_id FK
-  }
-  DOCUMENTS {
-    uuid id PK
-    string storageKey UK
-  }
-  DOCUMENT_VERSIONS {
-    uuid id PK
-    uuid documentId FK
-  }
-  DOCUMENT_ATTACHMENTS {
-    uuid id PK
-    uuid documentId FK
-    string entityType
-    string entityId
-  }
-  RFPS {
-    uuid id PK
-    char lead_id
-    char opportunity_id
-    char document_id
-  }
-  RFP_DOCUMENT_ASSOCIATIONS {
-    uuid id PK
-    char rfp_id
-    char document_id
-  }
+  TECHNICAL_ASSIGNMENTS }o..o| OPPORTUNITIES : opportunity_id
+  TECHNICAL_ASSIGNMENTS }o..o| RFPS : rfp_ref
+  ASSESSMENTS }o..o| OPPORTUNITIES : opportunity_id
+
+  RFPS }o..o| LEADS : lead_id
+  RFPS }o..o| OPPORTUNITIES : opportunity_id
+  DOCUMENT_ATTACHMENTS }o..o| LEADS : entity_uuid
 ```
-
-`OPPORTUNITIES` is **logical only**—no `opportunity_db` schema in repo yet.
-
-## Migration status
-
-| Service | CLI scripts (package.json) | synchronize |
-|---------|---------------------------|-------------|
-| Lead | `migration:lead:*` | false |
-| Document | `migration:run` etc. | false |
-| RFP | `migration:run:rfp` | false |
-| Stubs | None | N/A |
 
 ## Configuration notes
 
-- Document Service: `DB_NAME=document_db` in `.env.example` and consolidation docs.
-- Duplicate env anti-pattern was fixed in `.env.documents.local` (single `DB_NAME`; analysis from templates, not reading gitignored secrets).
+| Topic | Status |
+|-------|--------|
+| `document_db` vs legacy `dealplus_documents` | Consolidated per `docs/database/document-db-consolidation.md` |
+| SSL (`DB_SSL_CA`, `ca.pem`) | Used by RFP, Compliance, templates; path relative to `backend/` cwd |
+| Per-service `.env` | Required at `apps/<service>/.env` for Nest bootstrap on several services |
+| Approval DB vs memory | **Inconsistent** — migrations exist but AppModule does not register TypeORM |
+
+## Migrations commands (from `backend/package.json`)
+
+| Service | npm script |
+|---------|------------|
+| Document | `migration:run`, etc. |
+| Lead | `migration:lead:run` |
+| RFP | `migration:run:rfp` |
+| Approval | `migration:run:approval` |
+| Opportunity | `opp:migrate` |
+| Assignment | `asg:migrate` |
+| Compliance | TypeORM CLI via `data-source.ts` (see service README) |

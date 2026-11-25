@@ -1,27 +1,20 @@
-import { createContext, useContext, useEffect, useReducer } from 'react';
-import { seedLeads, seedOpportunities, seedSynopses, seedDecisions, seedCompliance, seedComplianceMeta, seedEvaluations, seedReviews } from '../data/seed.js';
+import { createContext, useContext, useReducer } from 'react';
 import { stageMeta } from '../data/defaults.js';
-import { OPP_EXTRAS } from '../data/oppExtras.js';
-
-const KEY = 'dealpulse-demo-v14'; // renamed to DealPulse
 
 const initial = () => ({
-  leads: seedLeads,
-  opportunities: seedOpportunities.map((o) => ({ ...o, ...(OPP_EXTRAS[o.id] || {}) })),
-  synopses: seedSynopses,
-  decisions: seedDecisions,
-  compliance: seedCompliance,
-  complianceMeta: seedComplianceMeta,
-  teams: [], // simulated Microsoft Teams messages sent when someone is assigned work
-  evaluations: seedEvaluations,
-  reviews: seedReviews,
-  seq: { lead: 360, opp: 140, syn: 45, eval: 20 }
+  leads: [],
+  opportunities: [],
+  synopses: [],
+  rfps: [],
+  apiApprovals: [],
+  decisions: [],
+  compliance: [],
+  complianceMeta: {},
+  teams: [],
+  evaluations: [],
+  reviews: [],
+  seq: { lead: 0, opp: 0, syn: 0, eval: 0 },
 });
-
-const load = () => {
-  try { const s = localStorage.getItem(KEY); if (s) return JSON.parse(s); } catch (e) { /* ignore */ }
-  return initial();
-};
 
 export const stamp = () => new Date().toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 const year = () => new Date().getFullYear();
@@ -30,7 +23,16 @@ const upd = (list, id, fn) => list.map((x) => (x.id === id ? fn(x) : x));
 
 function reducer(state, a) {
   switch (a.type) {
-    case 'RESET': return initial();
+    case 'SET_LEADS':
+      return { ...state, leads: a.leads || [] };
+    case 'SET_OPPORTUNITIES':
+      return { ...state, opportunities: a.opportunities || [] };
+    case 'SET_RFPS':
+      return { ...state, rfps: a.rfps || [] };
+    case 'SET_API_APPROVALS':
+      return { ...state, apiApprovals: a.apiApprovals || [] };
+    case 'RESET':
+      return initial();
 
     case 'ADD_LEAD': {
       const n = state.seq.lead + 1;
@@ -153,8 +155,7 @@ function reducer(state, a) {
 const Ctx = createContext(null);
 
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, load);
-  useEffect(() => { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignore */ } }, [state]);
+  const [state, dispatch] = useReducer(reducer, undefined, initial);
   return <Ctx.Provider value={{ state, dispatch }}>{children}</Ctx.Provider>;
 }
 

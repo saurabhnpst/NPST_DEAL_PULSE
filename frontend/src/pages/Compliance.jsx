@@ -3,18 +3,18 @@ import { Link } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, fmtDate } from '../store/Store.jsx';
 import { OPEN_STAGES, isTender } from '../data/defaults.js';
-import { STANDARD_COMPLIANCE } from '../data/seed.js';
+import { STANDARD_COMPLIANCE } from '../data/complianceTemplates.js';
 import { Badge, Drawer, Pills, Stepper, Toast } from '../components/ui.jsx';
 import { useTeams, TeamsBadge } from '../components/Teams.jsx';
 
 const EXPERT_ROLES = ['Product', 'Security', 'Legal', 'Compliance', 'Architecture'];
-// Experts per role who can be tagged on a requirement (demo roster).
+/** SME roster per role — populated from assignment APIs when available. */
 const EXPERTS = {
-  Product: ['Rahul M. · Product Manager', 'Anita P. · Product Owner, UPI'],
-  Security: ['Farhan Q. · CISO Office', 'Divya R. · Security Architect'],
-  Legal: ['Kavya S. · Legal Counsel', 'K. Rao · Finance & Legal'],
-  Compliance: ['Nikhil T. · Compliance Lead', 'Shreya B. · Audit & Compliance'],
-  Architecture: ['Sneha G. · Solution Architect', 'Manoj V. · Infra Architect']
+  Product: [],
+  Security: [],
+  Legal: [],
+  Compliance: [],
+  Architecture: [],
 };
 const personOf = (x) => (x || '').split(' · ')[0];
 const nowTime = () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });

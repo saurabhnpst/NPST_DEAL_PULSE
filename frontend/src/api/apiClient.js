@@ -1,7 +1,8 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api/v1';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3010/api/v1';
 const AUTH_BASE = import.meta.env.VITE_AUTH_BASE_URL ?? '';
 const CSRF_STORAGE_KEY = 'dealplus.csrfToken';
 const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
+const DEFAULT_TIMEOUT_MS = Number(import.meta.env.VITE_API_TIMEOUT_MS || 120000);
 
 export function getCsrfToken() {
   try {
@@ -43,9 +44,24 @@ async function loadCsrfToken() {
 }
 
 export class HttpError extends Error {
-  constructor(status, message) {
+  constructor(status, message, details) {
     super(message ?? `HTTP ${status}`);
     this.status = status;
+    this.details = details;
+  }
+}
+
+async function parseErrorBody(res) {
+  const text = await res.text();
+  try {
+    const json = JSON.parse(text);
+    const msg =
+      json?.error?.message ||
+      json?.message ||
+      (Array.isArray(json?.message) ? json.message.join(', ') : null);
+    return { message: msg || text.slice(0, 300) || `HTTP ${res.status}`, json };
+  } catch {
+    return { message: text.slice(0, 300) || `HTTP ${res.status}`, json: null };
   }
 }
 
@@ -59,14 +75,55 @@ export async function apiFetch(path, init = {}) {
     headers.set('X-CSRF-Token', await loadCsrfToken());
   }
   const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
-  const res = await fetch(url, { ...init, headers, credentials: 'include' });
+  const mockApproval = import.meta.env.VITE_APPROVAL_MOCK_TOKEN;
+  if (mockApproval && (url.includes('/approvals') || url.includes('/decisions'))) {
+    headers.set('x-mock-token', mockApproval);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, { ...init, headers, credentials: 'include', signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (res.status === 401 || res.status === 403) {
     clearCsrfToken();
   }
   if (!res.ok) {
-    throw new HttpError(res.status);
+    const { message, json } = await parseErrorBody(res);
+    throw new HttpError(res.status, message, json);
   }
   if (res.status === 204) return undefined;
+  const text = await res.text();
+  return text ? JSON.parse(text) : undefined;
+}
+
+/** Multipart upload (e.g. document uploads) — do not set Content-Type manually. */
+export async function apiUpload(path, formData, init = {}) {
+  const headers = new Headers(init.headers);
+  const mockApproval = import.meta.env.VITE_APPROVAL_MOCK_TOKEN;
+  const rel = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  if (mockApproval && (rel.includes('/approvals') || rel.includes('/decisions'))) {
+    headers.set('x-mock-token', mockApproval);
+  }
+  const method = (init.method ?? 'POST').toUpperCase();
+  if (UNSAFE_METHODS.includes(method)) {
+    headers.set('X-CSRF-Token', await loadCsrfToken());
+  }
+  const url = path.startsWith('http') ? path : `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), init.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  let res;
+  try {
+    res = await fetch(url, { method, ...init, body: formData, headers, credentials: 'include', signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!res.ok) {
+    const { message, json } = await parseErrorBody(res);
+    throw new HttpError(res.status, message, json);
+  }
   const text = await res.text();
   return text ? JSON.parse(text) : undefined;
 }

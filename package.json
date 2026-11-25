@@ -6,10 +6,14 @@
     "prepare": "husky",
     "verify": "npm run verify:frontend && npm run verify:backend",
     "verify:frontend": "npm --prefix frontend run build",
-    "verify:backend": "npm --prefix backend run build && npm --prefix backend run typecheck && npm --prefix backend test -- --passWithNoTests"
-  },
-  "devDependencies": {
-    "husky": "^9.1.7"
+    "verify:backend": "npm --prefix backend run build && npm --prefix backend run typecheck && npm --prefix backend test -- --passWithNoTests",
+    "ports:check": "npm --prefix backend run ports:check",
+    "infra:up": "npm --prefix backend run infra:up",
+    "infra:down": "npm --prefix backend run infra:down",
+    "start:backend": "npm --prefix backend run start:all",
+    "stop:backend": "npm --prefix backend run stop:all",
+    "start:frontend": "npm --prefix frontend run dev",
+    "smoke": "GATEWAY=http://localhost:3010 npm --prefix backend run smoke:phase3"
   },
   "engines": {
     "node": ">=20"

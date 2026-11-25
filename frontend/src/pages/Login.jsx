@@ -6,13 +6,13 @@ import BrandLockup, { ArrowMark } from '../components/Brand.jsx';
 export default function Login() {
   const { login } = useAuth();
   const [v, setV] = useState('sales');
-  const [email, setEmail] = useState(VERTICALS.sales.user.email);
+  const [email, setEmail] = useState('');
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [forgot, setForgot] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const pick = (k) => { setV(k); setEmail(VERTICALS[k].user.email); setPw(''); setErr(''); };
+  const pick = (k) => { setV(k); setErr(''); };
   const submit = async (e) => {
     e.preventDefault();
     setErr('');

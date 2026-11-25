@@ -2,7 +2,7 @@ import { Input, Select, MultiPick } from './ui.jsx';
 import {
   LEAD_SOURCES, RATINGS, SALUTATIONS, PRODUCTS, PRODUCTS_2_4, MODULES, STATES, COUNTRIES, INDUSTRIES, SUB_INDUSTRIES, YES_NO, productVertical
 } from '../data/defaults.js';
-import { TEAM } from '../data/seed.js';
+import { ownerOptions } from '../data/peopleOptions.js';
 import ContactPicker from './ContactPicker.jsx';
 import EmailPicker, { TaggedEmails } from './EmailPicker.jsx';
 
@@ -75,7 +75,7 @@ export default function LeadFields({ v, set, readOnly, existing, ai = {}, onPick
           <Input label="Mobile" value={v.mobile} error={err('mobile')} ai={ai.mobile} onChange={f('mobile')} readOnly={dis} />
           <Input label="Website" required value={v.website} error={err('website')} ai={ai.website} onChange={f('website')} readOnly={dis} />
           {existing
-            ? <Select label="Lead Owner" value={v.owner} onChange={f('owner')} options={TEAM} disabled={dis} />
+            ? <Select label="Lead Owner" value={v.owner} onChange={f('owner')} options={[v.owner].filter(Boolean)} disabled={dis} />
             : <Input label="Lead Owner" value={v.owner + ' (you)'} readOnly />}
           <Select label="Lead Source" required none value={v.leadSource} error={err('leadSource')} ai={ai.leadSource} onChange={f('leadSource')} options={LEAD_SOURCES} disabled={dis} />
           <Select label="Rating" required none value={v.rating} error={err('rating')} ai={ai.rating} onChange={f('rating')} options={RATINGS} disabled={dis} />

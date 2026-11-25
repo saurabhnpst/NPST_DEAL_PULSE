@@ -1,71 +1,101 @@
 # Implementation Roadmap
 
-Practical phases reusing existing code. Durations are indicative.
+Aligns with your delivery phases. **Phase 1 (discovery)** is this documentation pass — **no runtime work** included here.
 
-## Phase 0 — Foundations (1–2 weeks)
+## Phase alignment
 
-| Task | Delivers |
-|------|----------|
-| IAM: register `dealplus` app + permissions | Real RBAC |
-| Enable `REDIS_SERVICE_URL` on all active services | Session enforcement |
-| Document local/QA startup script | Repeatable dev |
-| Fix MinIO parity for document downloads | Blob + metadata aligned |
+| Your phase | Name | Roadmap focus |
+|------------|------|----------------|
+| **1** | System design & discovery | `docs/system-design/*` (current) |
+| **2** | Run & verify backend independently | Per-service `.env`, migrations, health, Swagger |
+| **3** | Run & verify frontend independently | Vite + auth; optional `VITE_DEMO_MODE` |
+| **4** | Integrate UI ↔ API via gateway | Wire pages to `services/*`; fix gateway gaps |
+| **5** | End-to-end business workflow | Cross-service HTTP; replace mocks |
+| **6** | Production readiness | Docker, IAM permissions, events, observability |
 
-## Phase 1 — First vertical slice (2–3 weeks)
-
-| Task | Delivers |
-|------|----------|
-| Wire **Leads** pages to `leadService` | First real UI↔API path |
-| Map IAM user to `x-changed-by` / `CurrentUser` | Audit correctness |
-| Gateway smoke tests in CI | Regression net |
-
-## Phase 2 — RFP + documents (2–3 weeks)
-
-| Task | Delivers |
-|------|----------|
-| Replace `rfpMock` with upload → RFP create → process poll | Real RFP UX |
-| RFP synopsis read from API | Store deprecation starts |
-| Integration test in CI | Confidence |
-
-## Phase 3 — Pipeline services (4–6 weeks)
-
-| Order | Service | Minimum scope |
-|-------|---------|---------------|
-| 1 | Opportunity | CRUD, stages, link to `lead_id` |
-| 2 | Approval | Pending list, approve/reject; Lead lifecycle HTTP |
-| 3 | Assignment | Assign users to opportunity |
-| 4 | Compliance | Matrix lines per opportunity |
-
-Wire **Pipeline, Opportunity, Decisions, Compliance** pages incrementally.
-
-## Phase 4 — Pre/Post-PO (future)
-
-Delivery service or extend Opportunity with PO milestones per PRD scope decision.
-
-## Phase 5 — Hardening
-
-- RabbitMQ events (lead.created, opportunity.won).
-- Observability (request IDs, structured logs).
-- Docker images per service.
-- Remove or gate demo Store/seed behind `VITE_DEMO_MODE`.
-
-## Dependency graph
+## Phase 2 — Backend verification (suggested order)
 
 ```mermaid
 flowchart TD
-  P0[IAM + Redis auth]
-  L[Leads UI API]
-  R[RFP UI API]
-  O[Opportunity API]
-  AP[Approval API]
-  AS[Assignment API]
-  CO[Compliance API]
+  INF[MySQL + Redis + MinIO from compose]
+  IAM[Command Module optional]
+  LS[lead-service]
+  DOC[document-service]
+  RFP[rfp-service]
+  OS[opportunity-service]
+  AP[approval-service]
+  ASN[assignment-service]
+  CO[compliance-service]
+  GW[api-gateway]
 
-  P0 --> L
-  L --> O
-  L --> R
-  O --> AS
-  O --> CO
-  L --> AP
-  R --> D[Document stable]
+  INF --> LS & DOC & OS & AP & ASN & CO
+  LS & DOC & RFP --> INF
+  RFP --> DOC
+  LS & DOC & RFP & OS & AP & ASN & CO --> GW
+  IAM -.-> GW
+```
+
+| Step | Action | Success criteria |
+|------|--------|------------------|
+| 2.1 | Copy `apps/*/.env.example` → `.env` | Each service boots without missing `DB_*` |
+| 2.2 | Run MySQL init + migrations per service | `migration:*` / `opp:migrate` / `asg:migrate` |
+| 2.3 | Start Document + MinIO (+ ClamAV for uploads) | Upload + GET document |
+| 2.4 | Start RFP + Redis | Health ready; optional PDF job |
+| 2.5 | Smoke Opportunity, Assignment, Compliance, Approval | Swagger or curl 2xx on sample CRUD |
+| 2.6 | Start gateway with all `*_SERVICE_URL` | Proxy returns upstream, not 502 |
+
+## Phase 3 — Frontend verification
+
+| Step | Action |
+|------|--------|
+| 3.1 | `frontend/.env` with `VITE_API_BASE_URL`, `VITE_AUTH_BASE_URL` → gateway |
+| 3.2 | Confirm login when IAM running |
+| 3.3 | Document which screens still need Store (all today) |
+
+## Phase 4 — Integration priorities
+
+| Order | Work item |
+|-------|-----------|
+| 1 | Leads + LeadDetail → `leadService` |
+| 2 | Fix gateway **Compliance** path (add routes or service prefix) |
+| 3 | Pipeline + Opportunity → `opportunityService` |
+| 4 | RfpSynopsis + RfpExtract → `documentService` + `rfpService` |
+| 5 | Decisions → `approvalService` |
+| 6 | Compliance page → `complianceService` |
+| 7 | Enable `REDIS_SERVICE_URL` + map IAM user to audit headers |
+
+## Phase 5 — E2E workflow
+
+| Item | Detail |
+|------|--------|
+| Replace Lead integration stubs | HTTP to Approval + Opportunity |
+| Assignment real clients | Set `AUTH_SERVICE_URL`, notification URLs |
+| Approval TypeORM repository | Replace in-memory for durability |
+| Event bus (optional) | RabbitMQ publishers per `DEPENDENCY_HANDLING.md` |
+
+## Phase 6 — Production readiness
+
+- Container images per Nest app
+- Secrets management (no committed `.env`)
+- Permission matrix in Command Module
+- Gateway rate limits, request IDs
+- Deprecate or gate demo `Store` (`VITE_DEMO_MODE`)
+
+## Dependency graph (integration sequencing)
+
+```mermaid
+flowchart TD
+  P2[Phase 2 backend up]
+  P4L[Phase 4 Leads UI]
+  P4O[Phase 4 Opportunity UI]
+  P4R[Phase 4 RFP UI]
+  P5[Phase 5 cross-service]
+  P6[Phase 6 prod]
+
+  P2 --> P4L
+  P4L --> P4O
+  P4L --> P4R
+  P4O --> P5
+  P4R --> P5
+  P5 --> P6
 ```

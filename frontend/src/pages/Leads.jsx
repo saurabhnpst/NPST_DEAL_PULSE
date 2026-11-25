@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, fmtDate } from '../store/Store.jsx';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { leadService } from '../services/leadService.js';
+import { uiLeadToApi } from '../mappers/leadMapper.js';
+import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import { defaultLead, LEAD_SOURCES, PRODUCTS, LEAD_STATUSES } from '../data/defaults.js';
 import { Badge, Drawer, Pills, ReadOnlyNote, Toast } from '../components/ui.jsx';
 import LeadFields from '../components/LeadFields.jsx';
@@ -17,8 +21,10 @@ const APPROVAL = {
 };
 
 export default function Leads() {
-  const { user, can, readOnly } = useAuth();
-  const { state, dispatch } = useStore();
+  const { user, profile, can, readOnly } = useAuth();
+  const { state } = useStore();
+  const { leadsLoading, leadsError, reloadLeads } = useBusinessData();
+  const [saving, setSaving] = useState(false);
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const [status, setStatus] = useState(can.approveLead ? 'Pending approval' : 'All open');
@@ -41,8 +47,7 @@ export default function Leads() {
   // hide the 'not in RFP' warning once the salesperson has filled the field
   const aiView = ai && form ? Object.fromEntries(Object.entries(ai).filter(([k, t]) => t !== 'missing' || !form[k])) : null;
   const openForm = () => { setErr(''); setShowErrors(false); setAi(null); setRfpRes(null); setPicked(''); setForm(defaultLead(user)); };
-  const loadSample = () => { setErr(''); setShowErrors(false); setAi(null); setRfpRes(null); setPicked(''); setForm(defaultLead(user)); };
-  const save = (andNew) => {
+  const save = async (andNew) => {
     const n = errorCount(errors);
     if (n) {
       setShowErrors(true);
@@ -50,12 +55,21 @@ export default function Leads() {
       setToast(`Please fix ${n} field${n > 1 ? 's' : ''} before saving`);
       return;
     }
-    // keep the RFP extraction with the lead so the synopsis can be pre-filled later
-    const lead = rfpRes && form.rfp ? { ...form, rfpExtract: { fileName: rfpRes.fileName, synopsis: rfpRes.synopsis } } : form;
-    dispatch({ type: 'ADD_LEAD', lead, who: user.name });
-    setToast(`Lead saved: ${form.firstName} ${form.lastName} · ${form.company}`);
-    setErr(''); setAi(null); setRfpRes(null); setPicked(''); setShowErrors(false);
-    if (andNew) setForm(defaultLead(user)); else setForm(null);
+    setSaving(true);
+    setErr('');
+    try {
+      await leadService.create(uiLeadToApi(form, profile?.id));
+      await reloadLeads();
+      setToast(`Lead saved: ${form.firstName} ${form.lastName} · ${form.company}`);
+      setAi(null); setRfpRes(null); setPicked(''); setShowErrors(false);
+      if (andNew) setForm(defaultLead(user));
+      else setForm(null);
+    } catch (e) {
+      setErr(e?.message || 'Could not save lead. Check API connectivity.');
+      setToast('Save failed');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = ['All open', 'Pending approval', ...LEAD_STATUSES];
@@ -75,8 +89,25 @@ export default function Leads() {
     return !s || `${l.firstName} ${l.lastName} ${l.company} ${l.email}`.toLowerCase().includes(s);
   });
 
+  if (leadsLoading && state.leads.length === 0) return <LoadingPanel label="Loading leads…" />;
+  if (leadsError && state.leads.length === 0) {
+    return (
+      <ErrorPanel
+        title="Leads unavailable"
+        message={leadsError.message}
+        onRetry={reloadLeads}
+      />
+    );
+  }
+
   return (
     <>
+      {leadsError && (
+        <p className="banner err s13" role="alert">
+          Could not refresh leads: {leadsError.message}. Showing last loaded data.
+          <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={reloadLeads}>Retry</button>
+        </p>
+      )}
       <div className="row wrap between gap16" style={{ alignItems: 'flex-end' }}>
         <div>
           <h1 className="h1">Leads</h1>
@@ -116,12 +147,11 @@ export default function Leads() {
 
       {form && (
         <Drawer full title="New lead" onClose={() => setForm(null)} footer={<>
-          <button className="btn-p" onClick={() => save(false)}>Save</button>
-          <button className="btn" onClick={() => save(true)}>Save &amp; New</button>
-          <button className="btn" onClick={loadSample}>Load another sample</button>
+          <button className="btn-p" disabled={saving} onClick={() => save(false)}>{saving ? 'Saving…' : 'Save'}</button>
+          <button className="btn" disabled={saving} onClick={() => save(true)}>Save &amp; New</button>
           <button className="btn" onClick={() => setForm(null)}>Cancel</button>
         </>}>
-          <p className="defaults">Pre-filled with default values: record type TSP (Product Vertical TSP), source Sales Outbound, rating Warm, owner {user.name}, status New, industry Banking, country India, plus a sample contact. Change anything before saving.</p>
+          <p className="defaults s13 muted">New leads start with system defaults (record type TSP, source Sales Outbound, rating Warm, status New, country India). Owner is {user.name}.</p>
           {err && <p className="err" role="alert">{err}</p>}
           <RfpExtract part="lead" done={aiView} fileName={rfpRes?.fileName} onApply={(values, tags, res) => { setForm({ ...form, ...values, rfp: true }); setAi(tags); setRfpRes(res); setErr(''); }} />
           {picked && <p className="ok s13" role="status">Contact details filled for <b>{picked}</b> — name, designation, company, phone, mobile, email, website and state.</p>}

@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react';
+import { opportunityService } from '../services/opportunityService.js';
+import { uiOpportunityToCreate, apiOpportunityToUi } from '../mappers/opportunityMapper.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
 import { Drawer, Input, Select, TextArea, Badge } from './ui.jsx';
 import LeadPicker from './LeadPicker.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, inr, category } from '../store/Store.jsx';
 import { defaultOpportunity, stageMeta, PRODUCTS, PRODUCTS_2_4, MODULES, OPP_TYPES, LEAD_SOURCES, TERRITORIES, COMPETITORS, OPEN_STAGES, TENDER_TYPES, isTender, REGIONS, INDUSTRIES, HOSTING } from '../data/defaults.js';
 import { MultiPick } from './ui.jsx';
-import { TEAM, PRESALES } from '../data/seed.js';
+import { ownerOptions, PRESALES_OPTIONS } from '../data/peopleOptions.js';
 import { validateOpportunity, errorCount } from '../data/validators.js';
 
 /**
@@ -27,18 +30,21 @@ const fromLeadFields = (l) => ({
   ...(l.rfp ? {} : { presales: '—', skipPresales: true })
 });
 /** Undo the non-RFP setup when the tagged lead changes to an RFP lead or is removed. */
-const RFP_PATH = { presales: 'Vikram N.', skipPresales: false };
+const RFP_PATH = { presales: '—', skipPresales: false };
 
 export default function NewOpportunity({ onClose, onCreated, fromLead }) {
   const { user } = useAuth();
   const { state, dispatch } = useStore();
-  const owner = TEAM.includes(user.name) ? user.name : 'Priya S.';
+  const { reloadOpportunities, reloadLeads } = useBusinessData() || {};
+  const owners = ownerOptions(user);
+  const owner = owners[0] || '';
   const requireLead = !fromLead;
-  const [v, setV] = useState(() => defaultOpportunity({ name: owner }, fromLead ? {
-    presales: 'Vikram N.', ...fromLeadFields(fromLead), owner: TEAM.includes(fromLead.owner) ? fromLead.owner : owner
+  const [v, setV] = useState(() => defaultOpportunity(user, fromLead ? {
+    ...fromLeadFields(fromLead), owner: fromLead.owner || owner
   } : { leadId: '' }));
   const [tagged, setTagged] = useState(fromLead || null);
   const [err, setErr] = useState('');
+  const [saving, setSaving] = useState(false);
   const [showErrors, setShowErrors] = useState(false);
   const errors = useMemo(() => validateOpportunity(v, { requireLead }), [v, requireLead]);
   const f = (k) => (val) => setV({ ...v, [k]: val });
@@ -49,25 +55,48 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
 
   const tagLead = (lead) => {
     setTagged(lead);
-    setV((prev) => ({ ...prev, ...(lead.rfp && prev.skipPresales ? RFP_PATH : {}), ...fromLeadFields(lead), owner: TEAM.includes(lead.owner) ? lead.owner : prev.owner }));
+    setV((prev) => ({ ...prev, ...(lead.rfp && prev.skipPresales ? RFP_PATH : {}), ...fromLeadFields(lead), owner: lead.owner || prev.owner }));
   };
   const clearLead = () => {
     setTagged(null);
     setV((prev) => ({ ...prev, ...(prev.skipPresales ? RFP_PATH : {}), leadId: '', account: '', leadSource: 'Sales Outbound' }));
   };
-  const resetSample = () => { setErr(''); setShowErrors(false); setTagged(null); setV(defaultOpportunity({ name: owner }, { leadId: '' })); };
-
-  const save = () => {
+  const save = async () => {
     const n = errorCount(errors);
     if (n) { setShowErrors(true); return setErr(`Fix the highlighted fields before saving (${n} issue${n > 1 ? 's' : ''}).`); }
-    dispatch({ type: 'ADD_OPP', opp: { ...v, arr: Number(v.arr) || 0, oneTime: Number(v.oneTime) || 0, tag: isTender(v.tender) ? v.tender : '', tone: 'gray' }, who: user.name, fromLead: tagged?.id });
-    onCreated && onCreated();
+    setSaving(true);
+    setErr('');
+    try {
+      const created = await opportunityService.create(uiOpportunityToCreate(v));
+      const ui = apiOpportunityToUi(created);
+      if (ui) {
+        dispatch({
+          type: 'SET_OPPORTUNITIES',
+          opportunities: [ui, ...state.opportunities.filter((o) => o.id !== ui.id)],
+        });
+        if (tagged?.id) {
+          dispatch({
+            type: 'UPDATE_LEAD',
+            id: tagged.id,
+            patch: { status: 'Qualified', oppId: ui.id, approval: 'approved' },
+            note: `Converted to opportunity ${ui.id}`,
+            who: user.name,
+          });
+        }
+      }
+      await reloadOpportunities?.();
+      await reloadLeads?.();
+      onCreated?.(ui?.id);
+    } catch (e) {
+      setErr(e?.message || 'Could not create opportunity');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Drawer full title={fromLead ? `Convert lead · ${fromLead.company}` : 'New opportunity'} onClose={onClose} footer={<>
-      <button className="btn-p" onClick={save}>{fromLead ? 'Convert and create' : 'Save'}</button>
-      {!fromLead && <button className="btn" onClick={resetSample}>Load another sample</button>}
+      <button className="btn-p" onClick={save} disabled={saving}>{saving ? 'Saving…' : fromLead ? 'Convert and create' : 'Save'}</button>
       <button className="btn" onClick={onClose}>Cancel</button>
     </>}>
       <p className="defaults">
@@ -89,7 +118,7 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
           <input className={'in' + (errFor('account') ? ' err' : '')} list="acct-list" value={v.account} aria-invalid={errFor('account') ? 'true' : undefined} onChange={(e) => f('account')(e.target.value)} />
           <datalist id="acct-list">{accounts.map((a) => <option key={a} value={a} />)}</datalist>
         </Field2>
-        <Select label="Opportunity Owner" required value={v.owner} onChange={f('owner')} options={TEAM} />
+        <Select label="Opportunity Owner" required value={v.owner} onChange={f('owner')} options={owners} />
         <Select label="Lead Source" value={v.leadSource} onChange={f('leadSource')} options={LEAD_SOURCES} />
         <Select label="Region" value={v.region} onChange={f('region')} options={REGIONS} />
         <Select label="Territory" value={v.territory} onChange={f('territory')} options={TERRITORIES} />
@@ -104,7 +133,7 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
         <Input label="Opportunity Name" required value={v.name} error={errFor('name')} onChange={f('name')} note="Defaults to product · company on tagging" />
         {v.skipPresales
           ? <Input label="Pre-Sales owner" value="— · not needed for a non-RFP lead" readOnly />
-          : <Select label="Pre-Sales owner" value={v.presales} onChange={f('presales')} options={PRESALES} />}
+          : <Select label="Pre-Sales owner" value={v.presales} onChange={f('presales')} options={PRESALES_OPTIONS} />}
         <Select label="Stage" required value={v.stage} error={errFor('stage')} onChange={f('stage')} options={OPEN_STAGES} note={`Probability ${meta.prob}% · Forecast ${meta.forecast}`} />
         <Input label="Expected close date" required type="date" value={v.closeDate} error={errFor('closeDate')} onChange={f('closeDate')} note="Must be a future date" />
       </div>
