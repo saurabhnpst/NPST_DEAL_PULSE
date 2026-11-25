@@ -1,0 +1,12 @@
+{
+  "extends": "./apps/approval-service/tsconfig.app.json",
+  "compilerOptions": {
+    "declaration": false,
+    "outDir": "./dist/spec",
+    "rootDir": "./"
+  },
+  "include": [
+    "apps/approval-service/src/**/*.ts",
+    "test/**/*.ts"
+  ]
+}

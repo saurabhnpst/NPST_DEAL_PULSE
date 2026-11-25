@@ -1,6 +1,6 @@
 # DealPlus API catalogue (proposed)
 
-Base URL through Gateway: `/api/v1`. These are proposed contracts, not implemented endpoints. Protect routes with authentication and permission checks. Paginate list endpoints and standardize errors.
+Base URL through Gateway: `/api/v1`. Most routes remain proposed contracts. Approval-service mock endpoints run standalone at `http://localhost:3006/api/v1` for local verification. Protect routes with authentication and permission checks. Paginate list endpoints and standardize errors.
 
 ## Auth & users
 - POST `/auth/login`, `/auth/refresh`, `/auth/logout`

@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/approval-service"
+    "outDir": "../../dist/apps/approval-service",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true
   },
   "include": [
     "src/**/*.ts"

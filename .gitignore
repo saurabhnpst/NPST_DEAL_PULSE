@@ -1,37 +1,41 @@
-# ---- Dependencies ----
 node_modules/
 **/node_modules/
-
-# ---- Build output ----
 dist/
 build/
 coverage/
+.nyc_output/
+.turbo/
+.cache/
+tmp/
+temp/
+*.tmp
 *.tsbuildinfo
 
-# ---- Environment variables and secrets (the *.env.example files stay committed) ----
 .env
 .env.*
 !.env.example
-ca.pem
-*.pem
+!**/.env.example
 
-# ---- Logs ----
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials/
+
 *.log
 logs/
 npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# ---- OS files ----
 .DS_Store
 Thumbs.db
-
-# ---- IDE ----
-.vscode/
 .idea/
+.vscode/
+.cursor/
+.husky/_/
 
-# ---- Temporary files ----
-tmp/
-temp/
-
-# ---- Local reference files (not code) ----
 Opportunity Fields.xlsx
 Opportunity Information.docx

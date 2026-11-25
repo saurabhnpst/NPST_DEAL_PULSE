@@ -1,0 +1,762 @@
+openapi: 3.0.3
+info:
+  title: DealPlus Approval Service API
+  version: mock-baseline-v1
+  x-scope: Scope 1
+  description: |
+    **DealPlus Approval Service** — local mock-only NestJS service (Scope 1). Standalone on port **3006** with global base path **`/api/v1`**.
+
+    Most routes in the organisation API catalogue remain **proposed**; the approval and decision endpoints documented here are the **locally implemented mock baseline**.
+
+    Approval requests are created only through the internal domain seam `ApprovalLifecycleService.submit()` (and `parseSubmitApprovalInput()`). **There is no public HTTP submit endpoint.**
+
+    Terminal approvals (`APPROVED` / `REJECTED`) **never reopen** on expiry; timeout applies only while the request is still active.
+
+    Local timeout authority transfer (P&L Head → Sales Manager) is an explicit **mock-verification exception** for development and tests. It is **not** production policy, an agreed SLA, or a substitute for product-defined escalation windows.
+
+    All **PRD TBDs** remain open (approvers, routing, notification policy, request-changes, Sales recommendation, production identity, and full permission matrix details).
+
+    **Workflow (active approvals):** `PENDING_PNL_HEAD` → `PENDING_SALES_MANAGER` → `APPROVED` | `REJECTED`. One active approval per lead. Initial authority is P&L Head; after `expiresAt`, authority transfers to Sales Manager **without** creating a decision. Transfer is atomic and idempotent; repeated escalation must not duplicate transfer history. Only the **current approver** may approve or reject. Missing P&L Head or Sales Manager mapping returns **422**. If the Sales Manager is also the lead creator, self-approval after transfer returns **409** (`SELF_APPROVAL`); the request stays pending.
+
+    **Decisions:** `POST /approvals/:id/approve` and `POST /decisions/:id/proceed` share one domain transition. `POST /approvals/:id/reject` and `POST /decisions/:id/reject` share one domain transition. Rejection **reason** is mandatory; approval **comment** is optional.
+
+    **Idempotency:** Optional header `Idempotency-Key` on decision POSTs. Fallback key when omitted: `${id}:${outcome}` (outcome `APPROVED` or `REJECTED`). Server-side decision idempotency scope: `${approvalId}:${actorId}:${idempotencyKey}`. Repeated submission idempotency key returns the existing approval; a different key while an active approval exists returns **409**. After a terminal decision, a new submission may create a new request; prior history is preserved. First valid action wins; stale, duplicate, unauthorized, and expired actions must not mutate state.
+
+    **Reads:** Scoped by server-side policy (role, team, territory, product vertical, ownership, current approver, optional task/document grants); deny by default. Creator retains access to own request status and history where policy allows.
+
+    **Auth (mock only):** Signed local mock token via `Authorization: Bearer <mock-token>` or `x-mock-token`. Clients **never** send actor id or role in bodies; identity and role resolve server-side. Missing/invalid tokens map to **403** (not 401). Production identity and permissions remain external/TBD.
+
+    **Portal / notifications:** Pending queues, dashboards, entity status, and audit history are the system of work. No separate in-app notification feed. Teams/email parallel delivery and signed callbacks are **outside** this HTTP API.
+
+    **Domain events (local in-memory publisher, not HTTP):** `approval.submitted.v1`, `approval.decided.v1`, `approval.authority-transferred.v1`. Envelope fields: `eventId`, `eventType`, `schemaVersion` (current runtime value **`1.0`**), `occurredAt`, `producer` (`approval-service`), `correlationId`, `payload` (IDs only; no document bodies or sensitive commercial data).
+
+servers:
+  - url: http://localhost:3006/api/v1
+    description: Local mock-only approval-service
+
+tags:
+  - name: Health
+    description: Service liveness (unauthenticated).
+  - name: Approvals
+    description: Approval requests, history, and decisions on the approval resource.
+  - name: Decisions
+    description: Decision records and decision-scoped action aliases (`proceed` / `reject` use **approval id** in path).
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: healthCheck
+      summary: Health check
+      description: Returns service identity and timestamp. No authentication.
+      security: []
+      responses:
+        '200':
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /approvals:
+    get:
+      tags: [Approvals]
+      operationId: listApprovals
+      summary: List approvals visible to the actor
+      description: |
+        Returns approval requests the authenticated actor may read under mock policy (current approver, creator, admin, and scoped grants).
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      responses:
+        '200':
+          description: Visible approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /approvals/pending:
+    get:
+      tags: [Approvals]
+      operationId: pendingApprovals
+      summary: Pending approvals for current approver
+      description: |
+        In-memory filter: active statuses where `currentApproverId` matches the authenticated actor. Portal pending queue semantics; no separate notification feed.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      responses:
+        '200':
+          description: Pending items for this actor
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /approvals/{id}:
+    get:
+      tags: [Approvals]
+      operationId: getApproval
+      summary: Get approval by id
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdPath'
+      responses:
+        '200':
+          description: Approval request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalRequest'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /approvals/{id}/history:
+    get:
+      tags: [Approvals]
+      operationId: getApprovalHistory
+      summary: Approval audit history
+      description: Chronological history for the approval (submission, transfer, decisions, blocked self-approval).
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdPath'
+      responses:
+        '200':
+          description: History events
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalHistoryEvent'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /approvals/{id}/approve:
+    post:
+      tags: [Approvals]
+      operationId: approveApproval
+      summary: Approve an approval request
+      description: |
+        Creates an `APPROVED` decision when the actor is the current approver. Same domain transition as `POST /decisions/{id}/proceed` when `{id}` is the approval id.
+        Idempotency scope: `${approvalId}:${actorId}:${idempotencyKey}`.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdPath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveApprovalInput'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ConflictOrSelfApproval'
+
+  /approvals/{id}/reject:
+    post:
+      tags: [Approvals]
+      operationId: rejectApproval
+      summary: Reject an approval request
+      description: |
+        Creates a `REJECTED` decision. **Reason** is mandatory in the body.
+        Same domain transition as `POST /decisions/{id}/reject` when `{id}` is the approval id.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdPath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectApprovalInput'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /approvals/{id}/request-changes:
+    post:
+      tags: [Approvals]
+      operationId: requestChangesApproval
+      summary: Request changes (not implemented)
+      description: Deferred Scope 1 endpoint; product behavior TBD.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdPath'
+      responses:
+        '501':
+          description: Not implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 501
+                code: NOT_IMPLEMENTED
+                message: Request changes is not implemented
+
+  /decisions:
+    get:
+      tags: [Decisions]
+      operationId: listDecisions
+      summary: List decisions visible to the actor
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      responses:
+        '200':
+          description: Visible decisions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Decision'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /decisions/pending:
+    get:
+      tags: [Decisions]
+      operationId: pendingDecisions
+      summary: Pending decision views for current approver
+      description: Projection of active approvals awaiting action by the authenticated actor.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      responses:
+        '200':
+          description: Pending decision views
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingDecisionView'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /decisions/{id}:
+    get:
+      tags: [Decisions]
+      operationId: getDecision
+      summary: Get decision by decision id
+      description: Path `{id}` is the **decision** identifier (not the approval id).
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DecisionIdPath'
+      responses:
+        '200':
+          description: Decision
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /decisions/{id}/recommendation:
+    post:
+      tags: [Decisions]
+      operationId: recommendDecision
+      summary: Sales recommendation (not implemented)
+      description: Deferred Scope 1 endpoint; product behavior TBD.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DecisionIdPath'
+      responses:
+        '501':
+          description: Not implemented
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                statusCode: 501
+                code: NOT_IMPLEMENTED
+                message: Sales recommendation is not implemented
+
+  /decisions/{id}/proceed:
+    post:
+      tags: [Decisions]
+      operationId: proceedDecision
+      summary: Proceed (approve alias)
+      description: |
+        Path `{id}` is the **approval** identifier (same as `POST /approvals/{id}/approve`). Optional comment in body.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdOnDecisionRoutePath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApproveApprovalInput'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/ConflictOrSelfApproval'
+
+  /decisions/{id}/reject:
+    post:
+      tags: [Decisions]
+      operationId: rejectDecision
+      summary: Reject via decisions route
+      description: |
+        Path `{id}` is the **approval** identifier (same as `POST /approvals/{id}/reject`). **Reason** required.
+      security:
+        - MockBearerAuth: []
+        - MockTokenHeader: []
+      parameters:
+        - $ref: '#/components/parameters/ApprovalIdOnDecisionRoutePath'
+        - $ref: '#/components/parameters/IdempotencyKeyHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RejectApprovalInput'
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Decision'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+components:
+  securitySchemes:
+    MockBearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: mock-token
+      description: |
+        Local mock HMAC-signed token. Server validates signature and expiry, then resolves actor id and role from mock directory.
+        **Not** production JWT/M365 identity.
+    MockTokenHeader:
+      type: apiKey
+      in: header
+      name: x-mock-token
+      description: Alternative mock token header (same token format as Bearer).
+
+  parameters:
+    ApprovalIdPath:
+      name: id
+      in: path
+      required: true
+      description: Approval request identifier
+      schema:
+        type: string
+    DecisionIdPath:
+      name: id
+      in: path
+      required: true
+      description: Decision record identifier
+      schema:
+        type: string
+    ApprovalIdOnDecisionRoutePath:
+      name: id
+      in: path
+      required: true
+      description: Approval request identifier (decisions `proceed` / `reject` routes)
+      schema:
+        type: string
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |
+        Client-supplied idempotency key. If omitted, server uses `${id}:${outcome}` where outcome is `APPROVED` or `REJECTED`.
+        Effective decision key scope: `${approvalId}:${actorId}:${idempotencyKey}`.
+      schema:
+        type: string
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 400
+            code: VALIDATION_ERROR
+            message: reason is required
+    Forbidden:
+      description: Forbidden (includes missing/invalid mock token and unauthorized access)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 403
+            code: FORBIDDEN
+            message: Mock token required
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 404
+            code: NOT_FOUND
+            message: Approval not found
+    Conflict:
+      description: Conflict (duplicate active approval, already decided, etc.)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 409
+            code: CONFLICT
+            message: Active approval already exists for lead
+    ConflictOrSelfApproval:
+      description: Conflict or self-approval blocked
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            conflict:
+              value:
+                statusCode: 409
+                code: CONFLICT
+                message: Approval already decided
+            selfApproval:
+              value:
+                statusCode: 409
+                code: SELF_APPROVAL
+                message: Self-approval is not allowed
+    MappingMissing:
+      description: Approver mapping missing or incomplete
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 422
+            code: MAPPING_MISSING
+            message: No approver mapping for UPI
+    ConfigurationError:
+      description: Configuration error (e.g. production escalation guard)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            statusCode: 500
+            code: CONFIGURATION_ERROR
+            message: Production escalation requires approved business timeframe
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [service, status, timestamp]
+      properties:
+        service:
+          type: string
+          example: approval-service
+        status:
+          type: string
+          example: ok
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [statusCode, code, message]
+      properties:
+        statusCode:
+          type: integer
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - FORBIDDEN
+            - NOT_FOUND
+            - CONFLICT
+            - MAPPING_MISSING
+            - SELF_APPROVAL
+            - CONFIGURATION_ERROR
+            - NOT_IMPLEMENTED
+        message:
+          type: string
+
+    ApproveApprovalInput:
+      type: object
+      properties:
+        comment:
+          type: string
+          description: Optional approval comment
+
+    RejectApprovalInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          description: Mandatory rejection reason
+
+    ApprovalStatus:
+      type: string
+      enum: [PENDING_PNL_HEAD, PENDING_SALES_MANAGER, APPROVED, REJECTED]
+
+    ApprovalAuthorityRole:
+      type: string
+      enum: [PNL_HEAD, SALES_MANAGER]
+
+    ApprovalHistoryType:
+      type: string
+      enum: [SUBMITTED, AUTHORITY_TRANSFERRED, APPROVED, REJECTED, DECISION_BLOCKED]
+
+    HistoryActorRole:
+      type: string
+      enum: [SALES_REPRESENTATIVE, SALES_MANAGER, PNL_HEAD, ADMIN, SYSTEM]
+
+    ActorRole:
+      type: string
+      enum: [SALES_REPRESENTATIVE, SALES_MANAGER, PNL_HEAD, ADMIN]
+
+    DecisionOutcome:
+      type: string
+      enum: [APPROVED, REJECTED]
+
+    ApprovalRequest:
+      type: object
+      required:
+        - id
+        - leadId
+        - creatorId
+        - productVertical
+        - teamId
+        - territoryId
+        - status
+        - currentAuthorityRole
+        - currentApproverId
+        - originalApproverId
+        - submissionIdempotencyKey
+        - expiresAt
+        - submittedAt
+        - updatedAt
+        - version
+      properties:
+        id:
+          type: string
+        leadId:
+          type: string
+        creatorId:
+          type: string
+        productVertical:
+          type: string
+        teamId:
+          type: string
+        territoryId:
+          type: string
+        taskIds:
+          type: array
+          items:
+            type: string
+        documentIds:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        currentAuthorityRole:
+          $ref: '#/components/schemas/ApprovalAuthorityRole'
+        currentApproverId:
+          type: string
+        originalApproverId:
+          type: string
+        submissionIdempotencyKey:
+          type: string
+        decisionIdempotencyKey:
+          type: string
+        decisionId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
+        transferredAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        version:
+          type: integer
+          minimum: 1
+
+    ApprovalHistoryEvent:
+      type: object
+      required:
+        - id
+        - approvalId
+        - type
+        - actorId
+        - actorRole
+        - timestamp
+        - idempotencyKey
+      properties:
+        id:
+          type: string
+        approvalId:
+          type: string
+        type:
+          $ref: '#/components/schemas/ApprovalHistoryType'
+        actorId:
+          type: string
+        actorRole:
+          $ref: '#/components/schemas/HistoryActorRole'
+        timestamp:
+          type: string
+          format: date-time
+        idempotencyKey:
+          type: string
+        previousApproverId:
+          type: string
+        newApproverId:
+          type: string
+        comment:
+          type: string
+        reason:
+          type: string
+
+    Decision:
+      type: object
+      required:
+        - id
+        - approvalId
+        - outcome
+        - actorId
+        - actorRole
+        - decidedAt
+        - idempotencyKey
+      properties:
+        id:
+          type: string
+        approvalId:
+          type: string
+        outcome:
+          $ref: '#/components/schemas/DecisionOutcome'
+        actorId:
+          type: string
+        actorRole:
+          $ref: '#/components/schemas/ActorRole'
+        decidedAt:
+          type: string
+          format: date-time
+        idempotencyKey:
+          type: string
+        comment:
+          type: string
+        reason:
+          type: string
+
+    PendingDecisionView:
+      type: object
+      required:
+        - approvalId
+        - leadId
+        - status
+        - currentAuthorityRole
+        - expiresAt
+        - submittedAt
+      properties:
+        approvalId:
+          type: string
+        leadId:
+          type: string
+        status:
+          $ref: '#/components/schemas/ApprovalStatus'
+        currentAuthorityRole:
+          $ref: '#/components/schemas/ApprovalAuthorityRole'
+        expiresAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: string
+          format: date-time
