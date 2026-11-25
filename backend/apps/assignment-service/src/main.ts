@@ -1,18 +1,27 @@
 import { NestFactory } from '@nestjs/core';
-import * as cookieParser from 'cookie-parser';
-import {
-  assertRequiredEnv,
-  loadServiceEnv,
-} from '../../../libs/common/src/config/service-env';
+import { loadEnvFiles } from './config/load-env';
 import { AppModule } from './app.module';
+import { configureApp, setupSwagger } from './app.setup';
+
+loadEnvFiles();
+
+/** ASSIGNMENT_SERVICE_PORT, default 3007 (the shared PORT is ignored so services don't clash). */
+const port = Number(process.env.ASSIGNMENT_SERVICE_PORT) || 3007;
 
 async function bootstrap() {
-  loadServiceEnv('assignment-service');
-  assertRequiredEnv(['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']);
   const app = await NestFactory.create(AppModule);
-  app.use(cookieParser());
-  app.setGlobalPrefix('api/v1');
-  app.enableCors();
-  await app.listen(process.env.PORT || 3007);
+  configureApp(app);
+  setupSwagger(app);
+  await app.listen(port);
+  // eslint-disable-next-line no-console
+  console.log(`assignment-service listening on http://localhost:${port}/api/v1/health (docs: /api/docs)`);
 }
-bootstrap();
+
+bootstrap().catch((err: NodeJS.ErrnoException) => {
+  if (err?.code === 'EADDRINUSE') {
+    // eslint-disable-next-line no-console
+    console.error(`Port ${port} is already in use. Stop the other instance or set ASSIGNMENT_SERVICE_PORT.`);
+    process.exit(1);
+  }
+  throw err;
+});

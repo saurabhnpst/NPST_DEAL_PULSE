@@ -1,0 +1,17 @@
+{
+  "name": "dealplus-starter-kit",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "prepare": "husky",
+    "verify": "npm run verify:frontend && npm run verify:backend",
+    "verify:frontend": "npm --prefix frontend run build",
+    "verify:backend": "npm --prefix backend run build && npm --prefix backend run typecheck && npm --prefix backend test -- --passWithNoTests"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

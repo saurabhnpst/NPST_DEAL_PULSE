@@ -1,15 +1,32 @@
 import { Controller, Get } from '@nestjs/common';
-import { Public } from '../../../libs/command-module-auth/src';
+import { DataSource } from 'typeorm';
 
 @Controller('health')
 export class HealthController {
-  @Public()
+  constructor(private readonly dataSource: DataSource) {}
+
   @Get()
-  check() {
-    return {
+  async check() {
+    const timestamp = new Date().toISOString();
+    const base = {
       service: 'opportunity-service',
-      status: 'ok',
-      timestamp: new Date().toISOString(),
+      timestamp,
     };
+    try {
+      await this.dataSource.query('SELECT 1 AS ok');
+      return {
+        ...base,
+        status: 'ok',
+        database: 'connected',
+      };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Database unreachable';
+      return {
+        ...base,
+        status: 'degraded',
+        database: 'disconnected',
+        error: message,
+      };
+    }
   }
 }

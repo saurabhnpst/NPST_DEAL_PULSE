@@ -2,11 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/assignment-service",
-    "rootDir": "../.."
+    "outDir": "../../dist/apps/assignment-service"
   },
   "include": [
-    "src/**/*.ts",
-    "../../libs/**/*.ts"
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.spec.ts"
   ]
 }

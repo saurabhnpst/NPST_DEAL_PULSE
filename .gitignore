@@ -1,16 +1,18 @@
-
-# Dependencies
-
 node_modules/
-
 **/node_modules/
-
-# Environment variables and secrets
+dist/
+build/
+coverage/
+.nyc_output/
+.turbo/
+.cache/
+tmp/
+temp/
+*.tmp
+*.tsbuildinfo
 
 .env
-
 .env.*
-
 !.env.example
 !**/.env.example
 !**/.env.*.example
@@ -23,40 +25,28 @@ frontend/.env
 backend/backups/
 
 # Local MinIO binary/data (scripts/start-minio-host.sh)
-
 backend/.local/
 
-# Build output
-
-dist/
-
-build/
-
-coverage/
-
-# Logs
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+credentials/
 
 *.log
-
 logs/
-
-# OS files
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 .DS_Store
-
 Thumbs.db
-
-# IDE
-
-.vscode/
-
 .idea/
+.vscode/
+.cursor/
+.husky/_/
 
-# Temporary files
-
-tmp/
-
-temp/
-
-ca.pem
-
+Opportunity Fields.xlsx
+Opportunity Information.docx

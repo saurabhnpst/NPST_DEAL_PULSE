@@ -1,12 +1,13 @@
 services:
   mysql:
     image: mysql:8.0
-    container_name: dealpulse-mysql
+    container_name: dealplus-mysql
     restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root}
       MYSQL_USER: ${MYSQL_USER:-dealplus}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-approval_db}
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     volumes:
@@ -21,10 +22,10 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: dealpulse-rabbitmq
+    container_name: dealplus-rabbitmq
     restart: unless-stopped
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-dealpulse}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-dealplus}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change_me}
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
@@ -37,7 +38,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: dealpulse-redis
+    container_name: dealplus-redis
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes"]
     ports:
@@ -50,7 +51,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: dealpulse-minio
+    container_name: dealplus-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:

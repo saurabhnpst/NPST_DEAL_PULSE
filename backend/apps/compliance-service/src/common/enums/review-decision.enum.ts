@@ -1,0 +1,5 @@
+export enum ReviewDecision {
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  NEEDS_CHANGES = 'NEEDS_CHANGES',
+}

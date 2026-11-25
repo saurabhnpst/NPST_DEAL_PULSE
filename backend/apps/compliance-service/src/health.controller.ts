@@ -1,11 +1,18 @@
 import { Controller, Get } from '@nestjs/common';
-import { Public } from '../../../libs/command-module-auth/src';
+import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { HealthCheckResponseDto } from './dto/health-check-response.dto';
 
+@ApiTags('Health')
 @Controller('health')
 export class HealthController {
-  @Public()
   @Get()
-  check() {
+  @ApiOperation({
+    summary: 'Health check',
+    description:
+      'Returns service identity and current status. Does not verify database connectivity.',
+  })
+  @ApiResponse({ status: 200, type: HealthCheckResponseDto })
+  check(): HealthCheckResponseDto {
     return {
       service: 'compliance-service',
       status: 'ok',

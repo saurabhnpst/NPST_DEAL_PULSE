@@ -3,7 +3,10 @@
   "compilerOptions": {
     "declaration": false,
     "outDir": "../../dist/apps/approval-service",
-    "rootDir": "../.."
+    "rootDir": "../..",
+    "strict": true,
+    "noImplicitAny": true,
+    "strictBindCallApply": true
   },
   "include": [
     "src/**/*.ts",
