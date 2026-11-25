@@ -1,0 +1,146 @@
+{
+  "info": {
+    "name": "DealPulse API Gateway",
+    "description": "Phase 3 — business APIs through the DealPulse gateway. Import `DealPulse-Gateway.postman_environment.json` and set `gatewayBase` to your running port.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Gateway liveness",
+          "request": { "method": "GET", "url": "{{gatewayBase}}/health" }
+        },
+        {
+          "name": "Gateway readiness",
+          "request": { "method": "GET", "url": "{{gatewayBase}}/health/ready" }
+        }
+      ]
+    },
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "List leads",
+          "request": { "method": "GET", "url": "{{apiBase}}/leads?limit=10" }
+        },
+        {
+          "name": "Get lead",
+          "request": { "method": "GET", "url": "{{apiBase}}/leads/{{leadId}}" }
+        },
+        {
+          "name": "Move to Working",
+          "request": { "method": "POST", "url": "{{apiBase}}/leads/{{leadId}}/working", "body": { "mode": "raw", "raw": "{}" } }
+        },
+        {
+          "name": "Assess need (submit)",
+          "request": {
+            "method": "POST",
+            "url": "{{apiBase}}/leads/{{leadId}}/assess-need",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\"hasNeed\":true}" }
+          }
+        },
+        {
+          "name": "Approve lead (convert)",
+          "request": { "method": "POST", "url": "{{apiBase}}/leads/{{leadId}}/approve", "body": { "mode": "raw", "raw": "{}" } }
+        }
+      ]
+    },
+    {
+      "name": "Opportunities",
+      "item": [
+        {
+          "name": "List opportunities",
+          "request": { "method": "GET", "url": "{{apiBase}}/opportunities?limit=10" }
+        },
+        {
+          "name": "Pipeline summary",
+          "request": { "method": "GET", "url": "{{apiBase}}/opportunities/pipeline" }
+        },
+        {
+          "name": "Create opportunity",
+          "request": {
+            "method": "POST",
+            "url": "{{apiBase}}/opportunities",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Test Opp\",\n  \"accountName\": \"Postman Bank\",\n  \"closeDate\": \"2026-12-31\",\n  \"arr\": 100000,\n  \"products\": [{ \"productSlot\": 1, \"productTsp\": \"TSP\", \"modules\": [] }]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get opportunity",
+          "request": { "method": "GET", "url": "{{apiBase}}/opportunities/{{opportunityId}}" }
+        }
+      ]
+    },
+    {
+      "name": "RFP",
+      "item": [
+        {
+          "name": "List RFPs",
+          "request": { "method": "GET", "url": "{{apiBase}}/rfps" }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "item": [
+        {
+          "name": "List documents",
+          "request": { "method": "GET", "url": "{{apiBase}}/documents" }
+        }
+      ]
+    },
+    {
+      "name": "Approvals",
+      "item": [
+        {
+          "name": "List approvals",
+          "request": {
+            "method": "GET",
+            "url": "{{apiBase}}/approvals",
+            "header": [{ "key": "x-mock-token", "value": "{{approvalMockToken}}" }]
+          }
+        },
+        {
+          "name": "Pending approvals",
+          "request": {
+            "method": "GET",
+            "url": "{{apiBase}}/approvals/pending",
+            "header": [{ "key": "x-mock-token", "value": "{{approvalMockToken}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Assignments",
+      "item": [
+        {
+          "name": "List assignments",
+          "request": { "method": "GET", "url": "{{apiBase}}/assignments" }
+        }
+      ]
+    },
+    {
+      "name": "Compliance",
+      "item": [
+        {
+          "name": "List frameworks",
+          "request": { "method": "GET", "url": "{{apiBase}}/frameworks" }
+        },
+        {
+          "name": "List assessments",
+          "request": { "method": "GET", "url": "{{apiBase}}/assessments" }
+        },
+        {
+          "name": "Configurations",
+          "request": { "method": "GET", "url": "{{apiBase}}/configurations" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { Lead } from '../entities/lead.entity';
 import {
@@ -12,6 +13,8 @@ import { OpportunityIntegration } from '../integrations/opportunity.integration'
 
 @Injectable()
 export class LeadLifecycleService {
+  private readonly logger = new Logger(LeadLifecycleService.name);
+
   constructor(
     private readonly approvalIntegration: ApprovalIntegration,
     private readonly opportunityIntegration: OpportunityIntegration,
@@ -89,13 +92,29 @@ export class LeadLifecycleService {
         'Lead is not pending approval',
       );
     }
+    const prior = {
+      approvalStage: lead.approvalStage,
+      approved: lead.approved,
+      status: lead.status,
+      converting: lead.converting,
+    };
     lead.approvalStage = LeadApprovalStage.APPROVED;
     lead.approved = true;
     lead.status = LeadLifecycleStage.QUALIFIED;
     lead.converting = true;
-    await this.opportunityIntegration.convertLeadToOpportunity({
-      leadId: lead.id,
-      convertedBy: changedBy,
-    });
+    try {
+      const { opportunityId } = await this.opportunityIntegration.convertLeadToOpportunity(
+        lead,
+        { leadId: lead.id, convertedBy: changedBy },
+      );
+      lead.converting = false;
+      this.logger.log(`Lead ${lead.id} converted to opportunity ${opportunityId}`);
+    } catch (err) {
+      lead.approvalStage = prior.approvalStage;
+      lead.approved = prior.approved;
+      lead.status = prior.status;
+      lead.converting = false;
+      throw err;
+    }
   }
 }

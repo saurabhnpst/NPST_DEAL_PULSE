@@ -1,6 +1,8 @@
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '../../../libs/command-module-auth/src';
 
-@Controller('health')
+@Public()
+@Controller('api/v1/health')
 export class HealthController {
   @Get()
   check() {

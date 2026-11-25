@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, dealValue, toCr, category, weighted, fmtDate } from '../store/Store.jsx';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import { STAGES, OPEN_STAGES, PRODUCTS, TERRITORIES, stageMeta, isTender } from '../data/defaults.js';
 import { Badge, Pills, ReadOnlyNote, Toast } from '../components/ui.jsx';
 import NewOpportunity from '../components/NewOpportunity.jsx';
@@ -12,6 +14,7 @@ const initials = (n) => (n && n !== '—' ? n.split(' ').map((x) => x[0]).join('
 export default function Pipeline() {
   const { user, can, readOnly } = useAuth();
   const { state } = useStore();
+  const { oppsLoading, oppsError, reloadOpportunities } = useBusinessData();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const [view, setView] = useState('Board');
@@ -41,8 +44,19 @@ export default function Pipeline() {
   const pipe = open.reduce((a, o) => a + dealValue(o), 0);
   const w = open.reduce((a, o) => a + weighted(o), 0);
 
+  if (oppsLoading && state.opportunities.length === 0) return <LoadingPanel label="Loading opportunities…" />;
+  if (oppsError && state.opportunities.length === 0) {
+    return <ErrorPanel title="Opportunities unavailable" message={oppsError.message} onRetry={reloadOpportunities} />;
+  }
+
   return (
     <>
+      {oppsError && (
+        <p className="banner s13" role="alert">
+          Could not refresh opportunities: {oppsError.message}
+          <button type="button" className="btn sm" style={{ marginLeft: 8 }} onClick={reloadOpportunities}>Retry</button>
+        </p>
+      )}
       <div className="row wrap between gap16" style={{ alignItems: 'flex-end' }}>
         <div>
           <h1 className="h1">Opportunities</h1>

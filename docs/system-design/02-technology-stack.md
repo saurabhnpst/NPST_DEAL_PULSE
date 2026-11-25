@@ -15,12 +15,12 @@ No TypeScript, no global state library (custom `Store.jsx` + Context).
 | Technology | Usage |
 |------------|--------|
 | NestJS 10 | All microservices |
-| TypeORM 0.3 | Lead, Document, RFP (MySQL) |
+| TypeORM 0.3 | Lead, Document, RFP, Opportunity, Assignment, Compliance, Approval (migrations; Approval runtime in-memory) |
 | BullMQ | RFP PDF + information-extraction workers |
 | ioredis | RFP queues + Command Module session reads |
 | AWS SDK S3 API | Document Service → MinIO/LocalStack |
 | `http-proxy-middleware` | API Gateway upstream routing |
-| Swagger | Lead, Document, RFP |
+| Swagger | Lead, Document, RFP, Approval, Compliance, Assignment (see each service) |
 
 Shared libraries under `backend/libs/`:
 

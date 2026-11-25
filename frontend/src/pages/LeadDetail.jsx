@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, fmtDate, stamp } from '../store/Store.jsx';
+import { leadService } from '../services/leadService.js';
+import { apiLeadToUi, uiLeadToApi } from '../mappers/leadMapper.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import { Badge, ReadOnlyNote, Tabs, Timeline, Toast } from '../components/ui.jsx';
 import LeadFields from '../components/LeadFields.jsx';
 import { validateLead, errorCount } from '../data/validators.js';
@@ -20,8 +24,27 @@ export default function LeadDetail() {
   const { id } = useParams();
   const { user, can, readOnly, vertical } = useAuth();
   const { state, dispatch } = useStore();
+  const { reloadLeads, reloadOpportunities } = useBusinessData() || {};
   const nav = useNavigate();
+  const [fetchState, setFetchState] = useState({ loading: false, error: null });
   const lead = state.leads.find((l) => l.id === id);
+
+  useEffect(() => {
+    if (lead || !id) return;
+    let cancelled = false;
+    (async () => {
+      setFetchState({ loading: true, error: null });
+      try {
+        const row = await leadService.get(id);
+        if (cancelled) return;
+        dispatch({ type: 'SET_LEADS', leads: [...state.leads, apiLeadToUi(row, user?.name)] });
+        setFetchState({ loading: false, error: null });
+      } catch (e) {
+        if (!cancelled) setFetchState({ loading: false, error: e });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [id, lead, dispatch, state.leads, user?.name]);
   const [tab, setTab] = useState('Details');
   const [form, setForm] = useState(lead);
   const [ask, setAsk] = useState(null);
@@ -38,7 +61,17 @@ export default function LeadDetail() {
 
   useEffect(() => { setForm(lead); }, [lead?.id, lead?.status, lead?.approval]); // eslint-disable-line
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3000); return () => clearTimeout(t); }, [toast]);
-  if (!lead) return <div className="panel empty"><h1 className="h1">Lead not found</h1><Link to="/leads">Back to leads</Link></div>;
+  if (fetchState.loading) return <LoadingPanel label="Loading lead…" />;
+  if (fetchState.error) {
+    return (
+      <ErrorPanel
+        title="Lead unavailable"
+        message={fetchState.error.message}
+        onRetry={() => { setFetchState({ loading: false, error: null }); }}
+      />
+    );
+  }
+  if (!lead) return <div className="panel empty"><h1 className="h1">Lead not found</h1><p className="muted s14">No lead with this ID in the API.</p><Link to="/leads">Back to leads</Link></div>;
 
   const editable = can.createLead && !lead.oppId && lead.approval !== 'rejected';
   const status = lead.status;
@@ -66,14 +99,22 @@ export default function LeadDetail() {
     if (status === 'Unqualified') return setAsk({ k: 'reopen', to });
     up({ status: to }, `Status: ${status} → ${to}`);
   };
-  const confirmAsk = () => {
+  const confirmAsk = async () => {
     if (ask.k === 'submit') {
       const sent = LEAD_APPROVERS.filter((a) => a.name !== user.name).map((a) => teams(a.name, `Lead approval needed (${a.role}): ${lead.company} (${lead.firstName} ${lead.lastName}) — submitted by ${user.name}.${askNote ? ' “' + askNote + '”' : ''}`, { kind: 'Approval', ctx: lead.id, link: '/leads/' + lead.id }));
-      up({ ...bant, status: 'Working', approval: 'pending', approvals: {}, approvalLog: [{ d: 'Submitted', by: user.name, at: stamp(), comment: askNote, teamsTo: sent.map((m) => m.to).join(', '), teamsAt: sent[0]?.time }, ...(lead.approvalLog || [])] },
-        (status === 'New' ? 'Status: New → Working · ' : '') + `Submitted for approval to ${approverText}` + (askNote ? ` · “${askNote}”` : ''));
-      setTab('Approval'); setToast(`Submitted to ${approverText}` + (sent.length ? ' · Teams message sent' : ''));
+      try {
+        if (status === 'New') await leadService.moveToWorking(id);
+        await leadService.assessNeed(id, { hasNeed: true });
+        await reloadLeads?.();
+        up({ ...bant, status: 'Working', approval: 'pending', approvals: {}, approvalLog: [{ d: 'Submitted', by: user.name, at: stamp(), comment: askNote, teamsTo: sent.map((m) => m.to).join(', '), teamsAt: sent[0]?.time }, ...(lead.approvalLog || [])] },
+          (status === 'New' ? 'Status: New → Working · ' : '') + `Submitted for approval to ${approverText}` + (askNote ? ` · “${askNote}”` : ''));
+        setTab('Approval'); setToast(`Submitted to ${approverText}` + (sent.length ? ' · Teams message sent' : ''));
+      } catch (e) {
+        setToast(e?.message || 'Submit for approval failed');
+      }
+    } else {
+      up({ status: ask.to, followUp: ask.k === 'nurture' ? askNote : lead.followUp, ...(ask.k === 'unq' ? { disqualReason: askNote, disqualRemark: askRemark } : {}) }, `Status: ${status} → ${ask.to}` + (askNote ? ` · ${askNote}` : '') + (askRemark ? ` · ${askRemark}` : ''));
     }
-    else up({ status: ask.to, followUp: ask.k === 'nurture' ? askNote : lead.followUp, ...(ask.k === 'unq' ? { disqualReason: askNote, disqualRemark: askRemark } : {}) }, `Status: ${status} → ${ask.to}` + (askNote ? ` · ${askNote}` : '') + (askRemark ? ` · ${askRemark}` : ''));
     setAsk(null); setAskNote(''); setAskRemark('');
   };
   const nextOf = { New: 'Working', Nurturing: 'Working' };
@@ -85,7 +126,7 @@ export default function LeadDetail() {
     Qualified: lead.oppId ? `Qualified and converted to ${lead.oppId}.` : lead.rfp ? 'Qualified. Write the RFP synopsis; the opportunity is created when Pre-Sales accepts it.' : 'Qualified. Click Convert to create the opportunity (Stage 1 · Qualification) — Sales handles every stage of a non-RFP deal, without Pre-Sales.'
   }[status];
 
-  const decide = () => {
+  const decide = async () => {
     const label = { approve: 'Approved', rework: 'More work needed', reject: 'Rejected' }[dec.mode];
     const m = lead.owner !== user.name ? teams(lead.owner, `Your lead ${lead.company} was ${label.toLowerCase()} by ${user.name} (${me.role})${dec.reason ? ' · ' + dec.reason : ''}${dec.comment.trim() ? ' — “' + dec.comment.trim() + '”' : ''}.`, { kind: 'Approval', ctx: lead.id, link: '/leads/' + lead.id }) : null;
     const entry = { d: label, by: user.name, role: me.role, at: stamp(), comment: dec.comment.trim(), reason: dec.reason, teamsTo: m ? lead.owner : undefined, teamsAt: m?.time };
@@ -94,7 +135,16 @@ export default function LeadDetail() {
     const tail = (entry.reason ? ` · ${entry.reason}` : '') + (entry.comment ? ` · “${entry.comment}”` : '');
     const pending = LEAD_APPROVERS.filter((a) => !next[a.key]);
     if (dec.mode === 'approve') { // one approval is enough: the lead moves on right away
-      up({ approvals: next, approval: 'approved', status: 'Qualified', approvalLog: log }, `Approved by ${me.role} · status → Qualified` + tail); setToast(`Approved by ${me.role} · lead now Qualified`);
+      try {
+        await leadService.approve(id);
+        await reloadLeads?.();
+        await reloadOpportunities?.();
+        up({ approvals: next, approval: 'approved', status: 'Qualified', approvalLog: log }, `Approved by ${me.role} · status → Qualified` + tail);
+        setToast(`Approved by ${me.role} · lead Qualified; opportunity created when conversion succeeds`);
+      } catch (e) {
+        setToast(e?.message || 'Approval failed on the server');
+        return;
+      }
     } else if (pending.length) { // no approval yet: wait for the other approver before the lead moves on
       up({ approvals: next, approvalLog: log }, `${label} by ${me.role} · waiting for ${pending.map((a) => a.role).join(', ')}` + tail);
       setToast(`${label} recorded · waiting for ${pending.map((a) => `${a.name} (${a.role})`).join(', ')}`);
@@ -107,10 +157,18 @@ export default function LeadDetail() {
     setDec({ mode: null, comment: '', reason: '' });
   };
 
-  const saveDetails = () => {
+  const saveDetails = async () => {
     const n = errorCount(errors);
     if (n) { setShowErrors(true); setErr(`Fix the highlighted fields before saving (${n} issue${n > 1 ? 's' : ''}).`); return; }
-    setErr(''); setShowErrors(false); up(form, 'Lead details edited'); setToast('Saved · change recorded in History');
+    setErr(''); setShowErrors(false);
+    try {
+      await leadService.update(id, uiLeadToApi(form));
+      await reloadLeads?.();
+      up(form, 'Lead details edited');
+      setToast('Saved · persisted via API');
+    } catch (e) {
+      setErr(e?.message || 'Save failed');
+    }
   };
 
   return (

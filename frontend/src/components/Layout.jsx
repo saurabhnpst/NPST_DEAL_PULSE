@@ -1,13 +1,11 @@
 import { NavLink, useLocation, useNavigate } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
-import { useStore } from '../store/Store.jsx';
 import { NAV_ITEMS, VERTICALS } from '../data/verticals.js';
 import { TeamsToasts } from './Teams.jsx';
 import BrandLockup from './Brand.jsx';
 
 export default function Layout({ children }) {
   const { vertical, user, logout, switchTo } = useAuth();
-  const { dispatch } = useStore();
   const nav = useNavigate();
   const loc = useLocation();
   const items = NAV_ITEMS.filter((n) => vertical.nav.includes(n.path));
@@ -26,7 +24,6 @@ export default function Layout({ children }) {
         </nav>
         <nav aria-label="Account" className="navgroup">
           <div className="navlabel">Account</div>
-          <button className="nav-a" onClick={() => { if (confirm('Reset all demo data to the original sample?')) dispatch({ type: 'RESET' }); }}>Reset demo data</button>
           <button className="nav-a" onClick={() => { logout(); nav('/'); }}>Sign out</button>
         </nav>
       </aside>
@@ -40,7 +37,7 @@ export default function Layout({ children }) {
               onKeyDown={(e) => { if (e.key === 'Enter' && e.currentTarget.value) nav('/opportunities?q=' + encodeURIComponent(e.currentTarget.value)); }} />
           </label>
           <div className="grow" />
-          <label className="row gap8 s12 muted">Demo · view as
+          <label className="row gap8 s12 muted" title="Development-only vertical permissions">View as
             <select className="in sm" value={vertical.key} onChange={(e) => { switchTo(e.target.value); nav('/'); }}>
               {Object.values(VERTICALS).map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
             </select>

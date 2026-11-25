@@ -101,9 +101,24 @@ export function AuthProvider({ children }) {
   };
 
   const v = vertical ? VERTICALS[vertical] : null;
+  const initialsFrom = (name) =>
+    name
+      ? name
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase()
+      : '—';
   const user = profile
-    ? { name: profile.name, email: profile.email, title: profile.roles?.[0] ?? v?.user?.title }
-  : v?.user;
+    ? {
+        name: profile.name,
+        email: profile.email,
+        title: profile.roles?.[0] ?? v?.user?.title,
+        initials: initialsFrom(profile.name),
+      }
+    : v?.user;
 
   return (
     <Ctx.Provider

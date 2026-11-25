@@ -1,9 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-
+import { buildMysqlSslFromEnv, findBackendRoot } from '../../../libs/service-config/src';
 import { DealplusAuthModule } from '../../../libs/common/src/auth/dealplus-auth.module';
 import commandModuleConfig from '../../../libs/common/src/config/command-module.config';
 import { serviceEnvFile } from '../../../libs/common/src/config/service-env';
@@ -35,16 +33,7 @@ import { QualificationsModule } from './qualifications/qualifications.module';
         autoLoadEntities: true,
         synchronize: false,
 
-        ssl: (() => {
-          const sslCa = config.get<string>('DB_SSL_CA');
-          if (!sslCa) {
-            return undefined;
-          }
-          return {
-            ca: readFileSync(resolve(process.cwd(), sslCa)),
-            rejectUnauthorized: true,
-          };
-        })(),
+        ssl: buildMysqlSslFromEnv(findBackendRoot(process.cwd()), process.env),
       }),
     }),
 

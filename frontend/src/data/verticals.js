@@ -1,5 +1,5 @@
-// Verticals (login roles). Each vertical decides what the user sees and can do.
-// Demo password for every account: demo@123
+// Development-only vertical permissions until Command Module registers DealPlus roles.
+// Vertical switch affects navigation and `can` flags — not production IAM.
 
 export const VERTICALS = {
   sales: {
@@ -27,8 +27,6 @@ export const VERTICALS = {
     can: { editOpp: true, editOppEarly: true, editOppLate: false, acceptSynopsis: true, approveCompliance: true, createEval: true }
   }
 };
-
-export const DEMO_PASSWORD = 'demo@123';
 
 // A lead submitted for approval goes to both approvers; it moves on only after both have decided.
 // `key` matches the vertical that acts as that approver (the Sales Manager approves from the Sales login).

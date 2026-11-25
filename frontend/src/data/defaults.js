@@ -1,6 +1,5 @@
 // Default values used when creating a lead or an opportunity.
-// Picklist fields get sensible system defaults; text fields are pre-filled
-// with a rotating demo sample so the team can click "Save" during a demo.
+// Picklist fields get empty or system defaults — no prefilled business records.
 
 // Picklists follow "Lead - Fields.xlsx" and "Opportunity Fields.xlsx".
 export const LEAD_SOURCES = ['Employee Referral', 'BD Outbound', 'Customer referral', 'Event', 'Linked-In', 'NPCI', 'Partner referral', 'Present customer', 'Sales Outbound', 'Social Media', 'Tender Portal', 'Website - Ads', 'Website - Organic', 'Website - Organic Search', 'Others', 'GFF 2025', 'Banking Connect Workshop'];
@@ -85,18 +84,8 @@ const iso = (d) => d.toISOString().slice(0, 10);
 export const today = () => iso(new Date());
 export const plusDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return iso(d); };
 
-const LEAD_SAMPLES = [
-  { salutation: 'Ms.', firstName: 'Anita', lastName: 'Rao', company: 'Coastal Gramin Bank', designation: 'AGM, IT', email: 'anita.rao@coastalgb.example', phone: '+91 80 4000 1122', mobile: '+91 98450 11223', website: 'coastalgb.example', state: 'Karnataka', productTsp: 'BBPS', module: 'Operating Unit', industry: 'Banking', subIndustry: 'Regional Rural Bank' },
-  { salutation: 'Mr.', firstName: 'Rohit', lastName: 'Kulkarni', company: 'Deccan Urban Co-op Bank', designation: 'CIO', email: 'rohit.k@deccanucb.example', phone: '+91 20 4100 2233', mobile: '+91 98220 12345', website: 'deccanucb.example', state: 'Maharashtra', productTsp: 'UPI', module: 'TPAP', industry: 'Banking', subIndustry: 'Coop Bank' },
-  { salutation: 'Dr.', firstName: 'Lakshmi', lastName: 'Iyer', company: 'Cauvery Small Finance Bank', designation: 'Head, Digital Payments', email: 'l.iyer@cauverysfb.example', phone: '+91 44 4200 3344', mobile: '+91 98400 22334', website: 'cauverysfb.example', state: 'Tamil Nadu', productTsp: 'EFRM', module: '', industry: 'Banking', subIndustry: 'Small Finance Bank' },
-  { salutation: 'Mr.', firstName: 'Sameer', lastName: 'Shah', company: 'Sabarmati Nagrik Bank', designation: 'GM, Operations', email: 'sameer.shah@snbank.example', phone: '+91 79 4300 4455', mobile: '+91 98250 33445', website: 'snbank.example', state: 'Gujarat', productTsp: 'IMPS', module: 'Remittance', industry: 'Banking', subIndustry: 'Coop Bank' },
-  { salutation: 'Ms.', firstName: 'Fathima', lastName: 'Rasheed', company: 'Malabar Co-op Bank', designation: 'DGM, IT', email: 'fathima.r@malabarcb.example', phone: '+91 495 440 5566', mobile: '+91 94470 44556', website: 'malabarcb.example', state: 'Kerala', productTsp: 'Banking SuperApp + Omnichannel', module: 'Banking SuperApp - Retail', industry: 'Banking', subIndustry: 'Coop Bank' }
-];
-
-let leadSampleIdx = 0;
 /** Default values for the "New lead" form. */
 export function defaultLead(user) {
-  const s = LEAD_SAMPLES[leadSampleIdx++ % LEAD_SAMPLES.length];
   return {
     recordType: 'TSP',
     middleName: '',
@@ -106,7 +95,7 @@ export function defaultLead(user) {
     rating: 'Warm',
     productTsp2: '—', productTsp3: '—', productTsp4: '—', module2: '', module3: '', module4: '', productRemark: '',
     rfp: false,
-    owner: user?.name || 'Pushkar B.',
+    owner: user?.name || '',
     status: 'New',
     notes: '', additionalRemarks: '',
     // SPOC 2
@@ -117,31 +106,26 @@ export function defaultLead(user) {
     street: '', city: '', zip: '', country: 'India',
     // qualification checks / BANT
     budgetApproved: false, need: '', authority: '', timelineKnown: '', timeline: '',
-    ...s
+    salutation: '', firstName: '', lastName: '', company: '', designation: '', email: '', phone: '', mobile: '', website: '', state: '',
+    productTsp: '', module: '',
+    subIndustry: '',
   };
 }
 
-const OPP_SAMPLES = [
-  { name: 'UPI acquiring switch', account: 'Deccan Urban Co-op Bank', productTsp: 'UPI', module: 'Acquiring Switch', arr: 4500000, oneTime: 12000000, compellingEvent: 'Current vendor AMC ends Mar 2027', painPoint: 'TPS ceiling during festive peaks' },
-  { name: 'Fraud monitoring rollout', account: 'Cauvery Small Finance Bank', productTsp: 'EFRM', module: '', arr: 3000000, oneTime: 8000000, compellingEvent: 'RBI fraud-monitoring circular', painPoint: 'Manual fraud review, high false positives' },
-  { name: 'BBPS biller onboarding', account: 'Malabar Co-op Bank', productTsp: 'BBPS', module: 'Operating Unit', arr: 1500000, oneTime: 4500000, compellingEvent: 'NPCI BBPS 2.0 deadline', painPoint: 'Slow biller onboarding' }
-];
-let oppSampleIdx = 0;
 /** Default values for the "New opportunity" form. */
 export function defaultOpportunity(user, overrides = {}) {
-  const s = OPP_SAMPLES[oppSampleIdx++ % OPP_SAMPLES.length];
   return {
-    name: s.name,
-    account: s.account,
-    owner: user?.name || 'Pushkar B.',
-    presales: 'Vikram N.',
+    name: '',
+    account: '',
+    owner: user?.name || '',
+    presales: '—',
     stage: 'Qualification',
     closeDate: plusDays(90),
     currency: 'INR',
-    arr: s.arr,
-    oneTime: s.oneTime,
-    productTsp: s.productTsp,
-    module: s.module,
+    arr: '',
+    oneTime: '',
+    productTsp: '',
+    module: '',
     productTsp2: '—',
     oppType: 'Hunting',
     businessType: 'New Business',
@@ -158,10 +142,10 @@ export function defaultOpportunity(user, overrides = {}) {
     billingFrequency: 'Annual',
     partner: 'No',
     competitors: [],
-    compellingEvent: s.compellingEvent,
-    painPoint: s.painPoint,
-    transactions: '10,00,000 per day',
-    nextStep: 'Discovery call with IT head',
+    compellingEvent: '',
+    painPoint: '',
+    transactions: '',
+    nextStep: '',
     ...overrides
   };
 }

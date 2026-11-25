@@ -1,10 +1,9 @@
 import { config as loadEnv } from 'dotenv';
-import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { DataSource } from 'typeorm';
 import {
+  buildMysqlSslFromEnv,
   findBackendRoot,
-  resolveSslCaPath,
   validateDatabaseEnv,
 } from '../../../../libs/service-config/src';
 import { ComplianceAssessmentLine } from '../entities/compliance-assessment-line.entity';
@@ -27,7 +26,7 @@ validateDatabaseEnv(process.env, {
 });
 
 const backendRoot = findBackendRoot(__dirname);
-const sslCaPath = resolveSslCaPath(backendRoot, process.env.DB_SSL_CA!);
+const ssl = buildMysqlSslFromEnv(backendRoot, process.env);
 
 export default new DataSource({
   type: 'mysql',
@@ -55,9 +54,6 @@ export default new DataSource({
     ),
   ],
   synchronize: false,
-  ssl: {
-    ca: readFileSync(sslCaPath),
-    rejectUnauthorized: true,
-  },
+  ...(ssl ? { ssl } : {}),
   migrationsTableName: 'compliance_migrations',
 });

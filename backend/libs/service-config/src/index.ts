@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
 import { isAbsolute, join, normalize, relative, resolve } from 'path';
+import { isMysqlTlsEnabled } from './mysql-ssl';
 
 export interface DatabaseEnvValidationOptions {
   readonly expectedDbName: string;
@@ -14,7 +15,6 @@ const REQUIRED_DATABASE_KEYS = [
   'DB_USER',
   'DB_PASSWORD',
   'DB_NAME',
-  'DB_SSL_CA',
 ] as const;
 
 export function findBackendRoot(fromDir: string): string {
@@ -83,5 +83,22 @@ export function validateDatabaseEnv(
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error(`${options.serviceLabel}: DB_PORT must be 1-65535`);
   }
+  const envLike = config as NodeJS.ProcessEnv;
+  if (isMysqlTlsEnabled(envLike)) {
+    const mode =
+      typeof config.DB_SSL_MODE === 'string' ? config.DB_SSL_MODE.trim().toUpperCase() : '';
+    if (mode === 'VERIFY_CA' || mode === 'VERIFY_IDENTITY') {
+      const ca = config.DB_SSL_CA;
+      if (typeof ca !== 'string' || ca.trim().length === 0) {
+        throw new Error(`${options.serviceLabel}: DB_SSL_CA is required when DB_SSL_MODE=${mode}`);
+      }
+    }
+  }
   return config;
 }
+
+export {
+  buildMysqlSslFromEnv,
+  isMysqlTlsEnabled,
+  type MysqlSslOptions,
+} from './mysql-ssl';

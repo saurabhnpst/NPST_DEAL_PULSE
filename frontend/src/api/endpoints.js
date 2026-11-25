@@ -10,7 +10,12 @@ export const endpoints = {
   rfp: (id) => `/rfps/${id}`,
   opportunities: '/opportunities',
   opportunity: (id) => `/opportunities/${id}`,
+  opportunityPipeline: '/opportunities/pipeline',
   approvals: '/approvals',
+  decisions: '/decisions',
   assignments: '/assignments',
+  assignmentHandoffs: '/handoffs',
   compliance: '/compliance',
+  complianceAssessments: '/assessments',
+  complianceFrameworks: '/frameworks',
 };
