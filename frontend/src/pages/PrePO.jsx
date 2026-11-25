@@ -2,13 +2,20 @@ import { useState } from 'react';
 import { Link } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, fmtDate } from '../store/Store.jsx';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { updateEvaluation } from '../services/workflowService.js';
 import { Badge, Kpi, Pills, ReadOnlyNote } from '../components/ui.jsx';
+
+// API errors are logged to the console (the list simply keeps its last loaded values)
+const alertLine = (e) => console.error('Pre-PO update failed:', e?.message || e);
 
 const STATUSES = ['Not Started', 'In Progress', 'Submitted', 'Under Bank Evaluation', 'Changes Requested', 'Accepted', 'Rejected'];
 
 export default function PrePO() {
   const { user, can, readOnly } = useAuth();
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
+  const { reloadWorkflow } = useBusinessData();
+  const update = (id, changes) => updateEvaluation(id, changes).then(reloadWorkflow).catch((e) => alertLine(e));
   const [tab, setTab] = useState('Active');
   const [type, setType] = useState('All');
   const [mine, setMine] = useState(false);
@@ -51,13 +58,13 @@ export default function PrePO() {
                   <td className="s13">{r.sales} · {r.tech}</td>
                   <td>
                     {editable && r.approval === 'Pending'
-                      ? <button className="btn" style={{ minHeight: 32 }} onClick={() => dispatch({ type: 'UPDATE_EVAL', id: r.id, patch: { approval: 'Approved', next: 'Kick-off with bank' } })}>Approve</button>
+                      ? <button className="btn" style={{ minHeight: 32 }} onClick={() => update(r.id, { approval: 'Approved', next: 'Kick-off with bank' })}>Approve</button>
                       : <Badge>{r.approval}</Badge>}
                   </td>
                   <td className="mono s13">{fmtDate(r.start)} → {fmtDate(r.target)}</td>
                   <td>
                     {editable
-                      ? <select className="in sm" aria-label="Status" value={r.status} onChange={(e) => dispatch({ type: 'UPDATE_EVAL', id: r.id, patch: { status: e.target.value } })}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
+                      ? <select className="in sm" aria-label="Status" value={r.status} onChange={(e) => update(r.id, { status: e.target.value })}>{STATUSES.map((s) => <option key={s}>{s}</option>)}</select>
                       : <Badge>{r.status}</Badge>}
                   </td>
                   <td className="s13">{r.next}</td>

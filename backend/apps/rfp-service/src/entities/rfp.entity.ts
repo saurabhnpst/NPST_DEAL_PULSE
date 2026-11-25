@@ -107,6 +107,31 @@ export class Rfp {
   @Column({ type: 'text', nullable: true })
   notes?: string;
 
+  // ---- RFP synopsis (Sales writes it, Pre-Sales accepts or returns it) ----
+  @ApiPropertyOptional({ enum: ['Draft', 'Submitted', 'Accepted', 'Returned'] })
+  @Column({ name: 'synopsis_status', type: 'varchar', length: 16, nullable: true })
+  synopsisStatus?: string;
+
+  @ApiPropertyOptional({ description: 'Estimated deal size (INR)' })
+  @Column({ name: 'deal_size', type: 'decimal', precision: 18, scale: 2, nullable: true })
+  dealSize?: string | number; // DECIMAL comes back as a string
+
+  @ApiPropertyOptional()
+  @Column({ type: 'text', nullable: true })
+  context?: string;
+
+  @ApiPropertyOptional()
+  @Column({ type: 'text', nullable: true })
+  risks?: string;
+
+  @ApiPropertyOptional()
+  @Column({ name: 'return_note', type: 'text', nullable: true })
+  returnNote?: string;
+
+  @ApiPropertyOptional({ maxLength: 100 })
+  @Column({ name: 'presales_owner_id', type: 'varchar', length: 100, nullable: true })
+  presalesOwnerId?: string;
+
   @ApiProperty({ type: String, format: 'date-time' })
   @CreateDateColumn({ name: 'created_at', type: 'datetime', precision: 6 })
   createdAt!: Date;

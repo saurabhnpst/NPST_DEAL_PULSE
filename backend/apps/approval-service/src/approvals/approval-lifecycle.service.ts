@@ -4,6 +4,7 @@ import {
   ApproveApprovalInput,
   ReassignApprovalInput,
   RejectApprovalInput,
+  RequestChangesInput,
   SubmitApprovalInput,
 } from '../dto/approval.dto';
 import {
@@ -19,7 +20,7 @@ import {
   ApprovalRequest,
   ApprovalStatus,
 } from './approval.types';
-import { Decision, PendingDecisionView } from '../decisions/decision.types';
+import { Decision, DecisionOutcome, PendingDecisionView } from '../decisions/decision.types';
 import { MockActor } from '../mock/actor.types';
 import {
   ASSIGNMENT_REPOSITORY,
@@ -41,7 +42,7 @@ import { SYSTEM_ACTOR_ID } from '../shared/roles';
 interface TransitionInput {
   approvalId: string;
   actor: MockActor;
-  outcome: 'APPROVED' | 'REJECTED';
+  outcome: DecisionOutcome;
   idempotencyKey: string;
   comment?: string;
   reason?: string;
@@ -125,6 +126,21 @@ export class ApprovalLifecycleService {
       outcome: 'REJECTED',
       idempotencyKey,
       reason: input.reason,
+    });
+  }
+
+  async requestChanges(
+    id: string,
+    actor: MockActor,
+    input: RequestChangesInput,
+    idempotencyKey: string,
+  ): Promise<Decision> {
+    return this.transition({
+      approvalId: id,
+      actor,
+      outcome: 'CHANGES_REQUESTED',
+      idempotencyKey,
+      comment: input.comment,
     });
   }
 
@@ -336,7 +352,7 @@ export class ApprovalLifecycleService {
       ...(input.comment === undefined ? {} : { comment: input.comment }),
       ...(input.reason === undefined ? {} : { reason: input.reason }),
     };
-    const type: ApprovalHistoryType = decision.outcome === 'APPROVED' ? 'APPROVED' : 'REJECTED';
+    const type: ApprovalHistoryType = decision.outcome;
     const history = this.historyEvent(
       approval.id,
       type,

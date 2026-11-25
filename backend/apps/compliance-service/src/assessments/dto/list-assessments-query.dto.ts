@@ -1,11 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsEnum, IsOptional, IsUUID, IsString, MaxLength } from 'class-validator';
 import { AssessmentStatus } from '../../common/enums/assessment-status.enum';
 
 export class ListAssessmentsQueryDto {
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(36) // opportunity public id (OPP-YYYY-NNNNN)
   opportunityId?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })

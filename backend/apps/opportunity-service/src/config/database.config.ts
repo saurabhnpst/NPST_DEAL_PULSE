@@ -14,6 +14,8 @@ import {
   OpportunityPublicIdSequence,
   OpportunityStageHistory,
   OpportunityDomainEvent,
+  OpportunityDecision,
+  OpportunityEvaluation,
 } from '../entities';
 
 export const OPPORTUNITY_ENTITIES = [
@@ -24,6 +26,8 @@ export const OPPORTUNITY_ENTITIES = [
   OpportunityActivity,
   OpportunityPublicIdSequence,
   OpportunityDomainEvent,
+  OpportunityDecision,
+  OpportunityEvaluation,
 ];
 
 const migrationsGlob = (baseDir: string) => `${baseDir}/migrations/*{.ts,.js}`;

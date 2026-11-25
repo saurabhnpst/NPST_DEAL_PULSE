@@ -1,4 +1,4 @@
-import type { Server } from 'http';
+import type { IncomingMessage, Server } from 'http';
 import { INestApplication, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
@@ -24,6 +24,15 @@ function proxyOptions(target: string, timeoutMs: number) {
           proxyReq.setHeader('x-correlation-id', correlation);
         }
       },
+      // Services enable CORS with `*`; drop their CORS headers so the gateway's own
+      // (origin-specific, credentials-allowed) CORS headers reach the browser.
+      proxyRes: (proxyRes: IncomingMessage) => {
+        for (const name of Object.keys(proxyRes.headers)) {
+          if (name.toLowerCase().startsWith('access-control-')) {
+            delete proxyRes.headers[name];
+          }
+        }
+      },
       error: (err: Error, _req: unknown, res: { writeHead?: Function; end?: Function }) => {
         const logger = new Logger('GatewayProxy');
         logger.error(`Proxy error → ${target}: ${err.message}`);
@@ -47,6 +56,8 @@ export function gatewayServiceRoutes(config: GatewayConfig): RouteRule[] {
   return [
     { path: '/api/v1/leads', target: config.services.leads },
     { path: '/api/v1/opportunities', target: config.services.opportunities },
+    { path: '/api/v1/opportunity-decisions', target: config.services.opportunities },
+    { path: '/api/v1/opportunity-evaluations', target: config.services.opportunities },
     { path: '/api/v1/rfps', target: config.services.rfps },
     { path: '/api/v1/documents', target: config.services.documents },
     { path: '/api/v1/uploads', target: config.services.documents },
@@ -126,12 +137,13 @@ export function attachGatewayProxy(
           p.startsWith('/api/auth') ||
           p === '/api/me' ||
           p.startsWith('/api/me/') ||
+          p === '/api/users' ||
           p.startsWith('/api/public')
         );
       },
     });
     server.use(iamRouteProxy);
-    logger.log(`IAM proxy /api/auth, /api/me → ${config.iamApiUrl}`);
+    logger.log(`IAM proxy /api/auth, /api/me, /api/users → ${config.iamApiUrl}`);
   }
 
   server.use(businessProxy);

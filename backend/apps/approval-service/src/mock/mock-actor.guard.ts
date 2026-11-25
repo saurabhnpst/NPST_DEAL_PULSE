@@ -13,14 +13,24 @@ export class MockActorGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<ActorContextRequest>();
-    const token = this.extractToken(request.headers);
-    const payload = this.tokens.verify(token);
-    const actor = this.directory.findActor(payload.actorId);
+    const actor = this.directory.findActor(this.actorId(request.headers));
     if (actor === undefined) {
       throw forbiddenError('Unknown actor');
     }
     request.actor = actor;
     return true;
+  }
+
+  /**
+   * Local development: the portal sends the signed-in user's approval actor as `x-actor-id`
+   * (from auth-service). Outside development a signed mock token is still required.
+   */
+  private actorId(headers: Record<string, string | string[] | undefined>): string {
+    const devActor = this.header(headers, 'x-actor-id');
+    if (process.env.NODE_ENV !== 'production' && devActor !== undefined && devActor.length > 0) {
+      return devActor;
+    }
+    return this.tokens.verify(this.extractToken(headers)).actorId;
   }
 
   private extractToken(headers: Record<string, string | string[] | undefined>): string {

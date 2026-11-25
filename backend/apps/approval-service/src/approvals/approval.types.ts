@@ -6,6 +6,7 @@ export const APPROVAL_STATUSES = [
   'PENDING_SALES_MANAGER',
   'APPROVED',
   'REJECTED',
+  'CHANGES_REQUESTED',
 ] as const;
 
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
@@ -25,6 +26,7 @@ export const APPROVAL_HISTORY_TYPES = [
   'REASSIGNED',
   'APPROVED',
   'REJECTED',
+  'CHANGES_REQUESTED',
   'DECISION_BLOCKED',
 ] as const;
 

@@ -351,6 +351,14 @@ export class Lead {
  
   @Column({ type: 'boolean', default: false })
   approved: boolean;
+
+  /** RFP / tender involved: opportunity is created when Pre-Sales accepts the RFP synopsis. */
+  @Column({ name: 'rfp_involved', type: 'boolean', default: false })
+  rfpInvolved: boolean;
+
+  /** Opportunity created when this lead was approved (public id, e.g. OPP-2026-00012). */
+  @Column({ name: 'converted_opportunity_id', type: 'varchar', length: 32, nullable: true })
+  convertedOpportunityId: string | null;
  
   // Stage timestamps
   @Column({ name: 'stage_1_entered', type: 'datetime', nullable: true })

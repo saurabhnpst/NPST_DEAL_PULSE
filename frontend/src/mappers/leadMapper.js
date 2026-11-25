@@ -7,22 +7,14 @@ const APPROVAL_FROM_API = {
   Rejected: 'rejected',
 };
 
-const APPROVAL_TO_API = {
-  none: 'None',
-  pending: 'Pending',
-  approved: 'Approved',
-  rejected: 'Rejected',
-  rework: 'Pending',
-};
-
 function pickModule(api) {
   const mods = api.moduleUpi || api.moduleBbps || api.moduleImps || [];
   if (Array.isArray(mods) && mods.length) return joinMulti(mods);
   return '';
 }
 
-/** Map API lead entity to the UI shape used by forms and tables. */
-export function apiLeadToUi(api, ownerLabel = '') {
+/** Map API lead entity to the UI shape used by forms and tables. `userName(id)` turns owner ids into names. */
+export function apiLeadToUi(api, userName = (id) => id || '—') {
   if (!api) return null;
   return {
     id: api.id,
@@ -40,7 +32,8 @@ export function apiLeadToUi(api, ownerLabel = '') {
     email: api.email || '',
     website: api.website || '',
     status: api.status || 'New',
-    owner: ownerLabel || api.ownerId || '—',
+    owner: userName(api.ownerId),
+    ownerId: api.ownerId || '',
     created: api.createdAt ? String(api.createdAt).slice(0, 10) : '',
     leadSource: api.leadSource || '',
     employeeReferral: api.employeeReferral || '',
@@ -50,8 +43,10 @@ export function apiLeadToUi(api, ownerLabel = '') {
     productTsp2: api.productTsp2 || '—',
     productTsp3: api.productTsp3 || '—',
     productTsp4: api.productTsp4 || '—',
-    rfp: false,
+    rfp: !!api.rfpInvolved,
     approval: APPROVAL_FROM_API[api.approvalStage] || 'none',
+    disqualReason: api.disqualificationReason || '',
+    disqualRemark: api.disqualificationRemark || '',
     industry: api.industry || '',
     subIndustry: api.subIndustry || '',
     country: api.country || '',
@@ -68,7 +63,7 @@ export function apiLeadToUi(api, ownerLabel = '') {
     additionalRemarks: api.additionalRemarks || '',
     description: api.description || '',
     history: [],
-    oppId: undefined,
+    oppId: api.convertedOpportunityId || undefined,
   };
 }
 
@@ -111,9 +106,11 @@ export function uiLeadToApi(form, ownerId) {
     currentYearlyVolume: form.currentVolume,
     yearlyVolumeProjection: form.yearlyVolumeProjection,
     additionalRemarks: form.additionalRemarks,
-    approvalStage: APPROVAL_TO_API[form.approval] || 'None',
+    rfpInvolved: !!form.rfp,
   };
   if (ownerId) payload.ownerId = ownerId;
+  // empty form fields are not sent (numeric/date columns reject '')
+  for (const k of Object.keys(payload)) if (payload[k] === '' || payload[k] === undefined) delete payload[k];
   if (modules.length) {
     const p = (form.productTsp || '').toUpperCase();
     if (p.includes('BBPS')) payload.moduleBbps = modules;

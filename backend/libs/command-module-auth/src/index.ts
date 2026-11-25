@@ -97,7 +97,8 @@ export class SessionReader implements OnModuleDestroy {
     @Optional() @Inject(COMMAND_MODULE_AUTH_REDIS) redis?: Redis,
   ) {
     this.ownsRedis = !redis;
-    this.redis = redis ?? new Redis(options.redisUrl, { maxRetriesPerRequest: 1 });
+    // lazyConnect: only connect when a session is actually read (no Redis needed while session checks are off)
+    this.redis = redis ?? new Redis(options.redisUrl, { maxRetriesPerRequest: 1, lazyConnect: true });
   }
 
   async onModuleDestroy(): Promise<void> {

@@ -8,6 +8,10 @@ export interface LocalAuthUser {
   readonly roles: string[];
   readonly permissions: string[];
   readonly tenantId?: string;
+  /** Numeric user id used by business services (e.g. opportunity ownerUserId). */
+  readonly userId: string;
+  /** Actor id in approval-service (e.g. actor-pnl-head). */
+  readonly approvalActorId?: string;
 }
 
 export interface AuthServiceConfig {
@@ -43,6 +47,8 @@ function parseUsers(raw: string | undefined): LocalAuthUser[] {
         roles: Array.isArray(u.roles) ? u.roles.map(String) : ['employee'],
         permissions: Array.isArray(u.permissions) ? u.permissions.map(String) : [],
         tenantId: u.tenantId ? String(u.tenantId) : 'local',
+        userId: String(u.userId ?? username),
+        approvalActorId: u.approvalActorId ? String(u.approvalActorId) : undefined,
       };
     });
   } catch (err) {

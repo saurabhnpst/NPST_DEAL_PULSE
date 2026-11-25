@@ -22,6 +22,17 @@ export type StageTaskJson = {
   teamsAt?: string;
 };
 
+/** Proposal document review (frontend `reviews[]`): document, version, reviewer, due, status. */
+export type DocumentReviewJson = {
+  id: string;
+  t: string;
+  v?: string;
+  r?: string;
+  due?: string;
+  s?: string;
+  teamsAt?: string;
+};
+
 export type DealTeamMemberJson = {
   n: string;
   r: string;
@@ -415,6 +426,9 @@ export class Opportunity {
 
   @Column({ name: 'deal_team', type: 'json', nullable: true })
   dealTeam: DealTeamMemberJson[] | null;
+
+  @Column({ type: 'json', nullable: true })
+  reviews: DocumentReviewJson[] | null;
 
   @Column({ name: 'hold_fallbacks', type: 'json', nullable: true })
   holdFallbacks: HoldFallbackJson[] | null;

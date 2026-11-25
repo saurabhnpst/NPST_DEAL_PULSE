@@ -622,6 +622,11 @@ export class LeadFieldsDto {
   @IsBoolean()
   approved?: boolean;
 
+  @ApiPropertyOptional({ description: 'RFP / tender involved' })
+  @IsOptional()
+  @IsBoolean()
+  rfpInvolved?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsDateString()

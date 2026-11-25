@@ -3,7 +3,10 @@ import { Link, useNavigate, useSearchParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useTeams } from '../components/Teams.jsx';
 import { useStore, inr, category, fmtDate } from '../store/Store.jsx';
-import { defaultOpportunity, plusDays } from '../data/defaults.js';
+import { plusDays } from '../data/defaults.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { acceptSynopsis, returnSynopsis, saveSynopsis } from '../services/workflowService.js';
+import { PRESALES_OPTIONS } from '../data/peopleOptions.js';
 import { Badge, ReadOnlyNote, Stepper, Toast, AiTag, aiClass } from '../components/ui.jsx';
 import RfpExtract from '../components/RfpExtract.jsx';
 
@@ -11,8 +14,10 @@ const STEPS = ['Lead with RFP', 'Synopsis drafted', 'Submitted to Pre-Sales', 'A
 const stepOf = (s) => ({ Draft: 1, Returned: 1, Submitted: 2, Accepted: 5 }[s] ?? 1);
 
 export default function RfpSynopsis() {
-  const { user, can, readOnly } = useAuth();
-  const { state, dispatch } = useStore();
+  const { user, can, readOnly, userIdByName } = useAuth();
+  const { state } = useStore();
+  const { reloadWorkflow, reloadOpportunities, reloadLeads } = useBusinessData();
+  const presalesPeople = PRESALES_OPTIONS.filter((n) => n !== '—');
   const teams = useTeams();
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -22,14 +27,14 @@ export default function RfpSynopsis() {
     const existing = leadId && state.synopses.find((s) => s.leadId === leadId);
     if (existing) return { selId: existing.id, draft: null };
     const l = leadId && state.leads.find((x) => x.id === leadId);
-    if (l) return { selId: null, draft: { leadId, name: `${l.productTsp} tender`, account: l.company, owner: l.owner, status: 'Draft', due: plusDays(14), rfpRef: '', scope: '', dealSize: 10000000,
+    if (l) return { selId: null, draft: { leadId, name: `${l.productTsp} tender`, account: l.company, owner: l.owner, ownerId: l.ownerId, status: 'Draft', due: plusDays(14), rfpRef: '', scope: '', dealSize: 10000000,
       products: l.productTsp, preBid: plusDays(5), submission: plusDays(14), bidOpening: plusDays(18), emd: 'Yes', emdAmount: '2,00,000', pbg: 'Yes · 3%', eligibility: '', context: '', risks: '',
       ...(l.rfpExtract ? { ...l.rfpExtract.synopsis.values, aiTags: l.rfpExtract.synopsis.tags, rfpFile: l.rfpExtract.fileName } : {}) } };
     return { selId: state.synopses[0]?.id, draft: null };
   });
   const [selId, setSelId] = useState(init.selId);
   const [draft, setDraft] = useState(init.draft);
-  const [presales, setPresales] = useState('Vikram N.');
+  const [presales, setPresales] = useState(() => PRESALES_OPTIONS.find((n) => n !== '—') || '');
   const [note, setNote] = useState('');
   const [toast, setToast] = useState('');
 
@@ -49,17 +54,28 @@ export default function RfpSynopsis() {
   const cls = (k, base = 'in') => base + aiClass(tag(k));
   const miss = (k) => tag(k) === 'missing' && !edit[k] ? <span className="note rfpx-miss">Not in RFP — fill manually</span> : null;
 
-  const saveDraft = (submit) => {
+  const saveDraft = async (submit) => {
     const syn = { ...edit, dealSize: Number(String(edit.dealSize).replace(/,/g, '')) || 0, status: submit ? 'Submitted' : edit.status === 'Returned' ? 'Returned' : 'Draft' };
     if (submit && (!syn.scope || !syn.context)) return setToast('Scope summary and client context are required to submit');
     if (submit && edit.aiTags && !syn.dealSize) return setToast('Estimated deal size was not in the RFP — please fill it before submitting');
-    dispatch({ type: 'SAVE_SYNOPSIS', syn });
-    if (draft) { setDraft(null); setSelId(`SYN-${new Date().getFullYear()}-${String(state.seq.syn + 1).padStart(3, '0')}`); }
-    setToast(submit ? 'Submitted to Pre-Sales' : 'Draft saved');
+    try {
+      const id = await saveSynopsis(syn, user.id);
+      await reloadWorkflow();
+      if (draft) { setDraft(null); setSelId(id); }
+      setToast(submit ? 'Submitted to Pre-Sales' : 'Draft saved');
+    } catch (e) {
+      setToast(e?.message || 'Save failed');
+    }
   };
-  const accept = () => {
-    const newId = `OPP-${new Date().getFullYear()}-${String(state.seq.opp + 1).padStart(5, '0')}`;
-    dispatch({ type: 'ACCEPT_SYNOPSIS', id: sel.id, presales, who: user.name, oppDefaults: defaultOpportunity({ name: sel.owner }) });
+  const accept = async () => {
+    let newId;
+    try {
+      newId = (await acceptSynopsis(sel.id, userIdByName(presales) || undefined)).opportunityId?.trim();
+      await Promise.all([reloadWorkflow(), reloadOpportunities(), reloadLeads()]);
+    } catch (e) {
+      setToast(e?.message || 'Accept failed');
+      return;
+    }
     teams(presales, `You are the Solutions owner for ${sel.name} (${sel.account}). The synopsis was accepted and the opportunity created.`, { kind: 'Assignment', ctx: sel.id, link: '/rfp' });
     teams(sel.owner, `Your synopsis ${sel.name} (${sel.account}) was accepted by ${user.name}. Solutions owner: ${presales}.`, { kind: 'Synopsis', ctx: sel.id, link: '/rfp' });
     nav('/opportunities/' + newId);
@@ -135,13 +151,13 @@ export default function RfpSynopsis() {
               <div className="col gap10" style={{ background: '#F7FAFE', borderRadius: 8, padding: 16 }}>
                 <h3 className="h2">Accept handover</h3>
                 <div className="grid2">
-                  <label className="fl">Solutions owner *<select className="in" value={presales} onChange={(e) => setPresales(e.target.value)}><option>Vikram N.</option><option>Sneha G.</option></select></label>
+                  <label className="fl">Solutions owner *<select className="in" value={presales} onChange={(e) => setPresales(e.target.value)}>{presalesPeople.map((n) => <option key={n}>{n}</option>)}</select></label>
                   <label className="fl">Note to Sales (required if returning)<input className="in" value={note} placeholder="What is missing or unclear?" onChange={(e) => setNote(e.target.value)} /></label>
                 </div>
                 <p className="s13 muted" style={{ margin: 0 }}>Accepting converts the lead and creates the opportunity at Qualification (10%) with default values plus the synopsis deal size.</p>
                 <div className="row gap8 wrap">
                   <button className="btn-p" onClick={accept}>Accept and create opportunity</button>
-                  <button className="btn" disabled={!note} onClick={() => { dispatch({ type: 'SAVE_SYNOPSIS', syn: { id: sel.id, status: 'Returned', returnNote: note } }); setToast('Returned to Sales'); }}>Return to Sales with questions</button>
+                  <button className="btn" disabled={!note} onClick={async () => { try { await returnSynopsis(sel.id, note); await reloadWorkflow(); setToast('Returned to Sales'); } catch (e) { setToast(e?.message || 'Return failed'); } }}>Return to Sales with questions</button>
                 </div>
               </div>
             )}

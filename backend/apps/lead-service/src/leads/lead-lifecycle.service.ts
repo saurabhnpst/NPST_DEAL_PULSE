@@ -79,6 +79,33 @@ export class LeadLifecycleService {
   }
 
   /**
+   * Approval rejected (approval-service decision) — lead closes as Unqualified with the reason.
+   */
+  markRejectedAfterApproval(lead: Lead, reason: string): void {
+    if (lead.approvalStage !== LeadApprovalStage.PENDING) {
+      throw new BadRequestException('Lead is not pending approval');
+    }
+    lead.approvalStage = LeadApprovalStage.REJECTED;
+    lead.status = LeadLifecycleStage.UNQUALIFIED;
+    lead.disqualificationReason = 'Rejected in approval';
+    lead.disqualificationRemark = reason.slice(0, 255);
+    if (!lead.stage3Entered) {
+      lead.stage3Entered = new Date();
+    }
+  }
+
+  /**
+   * Approver asked for more work — lead goes back to Sales (Working, no pending approval).
+   */
+  markSentBackAfterApproval(lead: Lead): void {
+    if (lead.approvalStage !== LeadApprovalStage.PENDING) {
+      throw new BadRequestException('Lead is not pending approval');
+    }
+    lead.approvalStage = LeadApprovalStage.NONE;
+    lead.status = LeadLifecycleStage.WORKING;
+  }
+
+  /**
    * After external approval succeeds — Stage 5 Qualified + opportunity handoff.
    * Formula fields (tspProductFormula, evokProductFormula) are entity columns only;
    * computation depends on upstream product rules not available in this repo.
@@ -101,6 +128,11 @@ export class LeadLifecycleService {
     lead.approvalStage = LeadApprovalStage.APPROVED;
     lead.approved = true;
     lead.status = LeadLifecycleStage.QUALIFIED;
+    if (lead.rfpInvolved) {
+      // RFP lead: stays Qualified until Pre-Sales accepts the RFP synopsis (that creates the opportunity).
+      lead.converting = false;
+      return;
+    }
     lead.converting = true;
     try {
       const { opportunityId } = await this.opportunityIntegration.convertLeadToOpportunity(
@@ -108,6 +140,7 @@ export class LeadLifecycleService {
         { leadId: lead.id, convertedBy: changedBy },
       );
       lead.converting = false;
+      lead.convertedOpportunityId = opportunityId;
       this.logger.log(`Lead ${lead.id} converted to opportunity ${opportunityId}`);
     } catch (err) {
       lead.approvalStage = prior.approvalStage;

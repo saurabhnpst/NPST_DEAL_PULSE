@@ -23,6 +23,7 @@ import { ApprovalEscalationScheduler } from './shared/approval-escalation.schedu
 import { CLOCK, SystemClock } from './shared/clock';
 import { ApprovalConfigService } from './shared/config';
 import { APPROVAL_EVENTS, InMemoryApprovalEventPublisher } from './shared/event-publisher';
+import { LeadClient } from './shared/lead-client';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { APPROVAL_EVENTS, InMemoryApprovalEventPublisher } from './shared/event-
     MockActorGuard,
     ApprovalLifecycleService,
     ApprovalEscalationScheduler,
+    LeadClient,
   ],
 })
 export class AppModule {}

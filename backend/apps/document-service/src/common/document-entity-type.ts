@@ -5,6 +5,8 @@ export const DOCUMENT_ENTITY_TYPES = [
   'PROJECT',
   'APPROVAL',
   'CONTRACT',
+  'OPPORTUNITY',
+  'RFP',
 ] as const;
 
 export type DocumentEntityType = (typeof DOCUMENT_ENTITY_TYPES)[number];

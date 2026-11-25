@@ -23,6 +23,7 @@ import { AssessNeedDto } from './dto/assess-need.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { LeadsService } from './leads.service';
+import { LinkOpportunityDto, RejectLeadDto } from './dto/approval-outcome.dto';
 
 @ApiTags('Leads')
 @ApiBearerAuth()
@@ -113,5 +114,34 @@ export class LeadsController {
     @ChangedBy() changedBy?: string,
   ): Promise<Lead> {
     return this.leadsService.approveLead(id, changedBy);
+  }
+
+  @Post(':id/reject')
+  @ApiOperation({ summary: 'Lead rejected in approval → Unqualified (called by approval-service)' })
+  reject(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RejectLeadDto,
+    @ChangedBy() changedBy?: string,
+  ): Promise<Lead> {
+    return this.leadsService.rejectLead(id, dto.reason, changedBy);
+  }
+
+  @Post(':id/link-opportunity')
+  @ApiOperation({ summary: 'Link the opportunity created from the RFP synopsis (called by rfp-service)' })
+  linkOpportunity(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: LinkOpportunityDto,
+    @ChangedBy() changedBy?: string,
+  ): Promise<Lead> {
+    return this.leadsService.linkOpportunity(id, dto.opportunityId, changedBy);
+  }
+
+  @Post(':id/send-back')
+  @ApiOperation({ summary: 'Approver asked for more work → back to Working (called by approval-service)' })
+  sendBack(
+    @Param('id', ParseUUIDPipe) id: string,
+    @ChangedBy() changedBy?: string,
+  ): Promise<Lead> {
+    return this.leadsService.sendBackLead(id, changedBy);
   }
 }

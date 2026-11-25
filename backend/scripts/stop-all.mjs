@@ -20,6 +20,18 @@ if (!Number.isFinite(pid) || pid <= 0) {
   process.exit(1);
 }
 
+if (process.platform === 'win32') {
+  // Windows has no process groups: kill the whole process tree.
+  const { execSync } = await import('child_process');
+  try {
+    execSync(`taskkill /pid ${pid} /T /F`, { stdio: 'inherit' });
+  } catch (e) {
+    console.log(`Could not stop pid ${pid}: ${e.message}`);
+  }
+  unlinkSync(pidFile);
+  process.exit(0);
+}
+
 try {
   process.kill(-pid, 'SIGTERM');
   console.log(`Sent SIGTERM to process group ${pid}`);

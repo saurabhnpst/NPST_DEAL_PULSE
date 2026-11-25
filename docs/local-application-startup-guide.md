@@ -1,120 +1,84 @@
-# Local Application Startup Guide (Phase 3)
+# Local Application Startup Guide
 
-**Verified gateway port on this machine:** `3010` (port `3000` is often occupied by another app).
+Runs the whole DealPulse stack on one machine (Windows, macOS or Linux). **No Docker and no Redis needed.**
 
-## Prerequisites
+| Part | Port | Notes |
+|------|------|-------|
+| Frontend (Vite) | 5173 | v14 UI, all data from the API |
+| API Gateway | 3010 | single entry for the browser: `/api/v1/*`, `/api/auth/*`, `/api/me`, `/api/users` |
+| auth-service | 3001 | local sign-in, sessions in memory |
+| lead / opportunity / rfp / document / approval / assignment / compliance | 3002–3008 | NestJS services |
+| MinIO | 9000 (console 9001) | document files; downloaded once into `backend/.local/` |
 
-- **Node.js** ≥ 20
-- **npm** at repo root and in `backend/`
-- **MySQL** — existing Aiven/local databases (**no drops/resets**):
-  - `lead_db`, `opportunity_db`, `rfp_db`, `document_db`, `approval_db`, `assignment_db`, `compliance_db`
-- Per-service env: copy `backend/apps/<service>/.env.example` → `.env` if missing; set shared `DB_*` and correct `DB_NAME`
-- **Frontend:** copy `frontend/.env.example` → `frontend/.env`
+Databases: one MySQL database per service (shared Aiven instance), configured in `backend/apps/<service>/.env`.
 
-### Optional infrastructure (document upload / RFP workers)
+## First-time setup
 
 ```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE/backend
-npm run infra:up          # LocalStack S3 + ClamAV (docker)
-npm run infra:wait        # Wait for ports 9000 + 3310
+npm --prefix backend install
+npm --prefix frontend install
 ```
 
-**Redis** (RFP Bull jobs): use your existing Redis host in `apps/rfp-service/.env` — not started by `infra:up`.
+Env files (copy the `.env.example` next to each when missing):
 
-## Check ports (does not kill anything)
+- `backend/apps/<service>/.env` — `DB_*` for each service
+- `backend/apps/auth-service/.env` — `AUTH_LOCAL_USERS` (see below)
+- `backend/apps/document-service/.env` — `MINIO_*`, `CLAMAV_ENABLED=false` for local dev (uploads skip the virus scan; stored `scanStatus = SKIPPED`)
+- `frontend/.env` — `VITE_API_BASE_URL=http://localhost:3010/api/v1`, `VITE_AUTH_BASE_URL=http://localhost:3010`
 
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run ports:check
-```
-
-## One command — all backend + gateway
+Run pending migrations (additive; safe to repeat), then seed the standard compliance lines once:
 
 ```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run start:backend
-```
-
-Equivalent:
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE/backend
-npm run start:all
-```
-
-Labeled logs: `auth`, `gateway`, `leads`, `opps`, `rfp`, `docs`, `approval`, `assign`, `compliance`.
-
-**Login:** `start:all` includes **auth-service** on port **3001**. Set `IAM_API_URL=http://localhost:3001` in `apps/api-gateway/.env` and configure `AUTH_LOCAL_USERS` in `apps/auth-service/.env` (see `apps/auth-service/README.md`). Requires **Redis** for sessions (`redis://127.0.0.1:6379`).
-
-## Stop backend
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run stop:backend
-```
-
-If you started services in separate terminals, use **Ctrl+C** in each (stop-all only tracks `start:all`).
-
-## Frontend
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run start:frontend
-```
-
-## Full stack (two terminals — recommended)
-
-**Terminal 1**
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run infra:up          # optional
-npm run start:backend
-```
-
-**Terminal 2**
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run start:frontend
-```
-
-## URLs (with `PORT=3010` in `apps/api-gateway/.env`)
-
-| What | URL |
-|------|-----|
-| Frontend (Vite) | http://localhost:5173 |
-| API Gateway | http://localhost:3010 |
-| Business API base | http://localhost:3010/api/v1 |
-| Central Swagger UI | http://localhost:3010/api/docs |
-| Gateway liveness | http://localhost:3010/health |
-| Gateway readiness | http://localhost:3010/health/ready |
-| Per-service Swagger (debug) | http://localhost:3002/api/docs … `3008/api/docs` |
-
-## Automated smoke (after backend is up)
-
-```bash
-cd /home/saurabh-soni/Desktop/NPST_DEAL_PULSE
-npm run smoke
-```
-
-With approval token:
-
-```bash
-APPROVAL_MOCK_TOKEN='<token>' GATEWAY=http://localhost:3010 npm run smoke
-```
-
-## Migrations (safe, non-destructive — run when schema drifts)
-
-From `backend/`:
-
-```bash
+cd backend
 npm run migration:lead:run
 npm run opp:migrate
 npm run migration:run:rfp
 npm run migration:run:approval
-npm run asg:migrate
-npm run migration:run          # document-service
+npm run migration:run                 # document-service
+npx typeorm-ts-node-commonjs -d apps/compliance-service/src/database/data-source.ts migration:run
+npm run seed:compliance               # needs the backend running (uses the gateway)
 ```
 
-Compliance: see `backend/apps/compliance-service/src/database/README.md`.
+## Start
+
+```bash
+# terminal 1 — MinIO + auth + gateway + all services (watch mode)
+npm run start:backend
+
+# terminal 2
+npm run start:frontend
+```
+
+Open http://localhost:5173. Health: http://localhost:3010/health/ready · Swagger: http://localhost:3010/api/docs
+
+Stop: `Ctrl+C` in terminal 1, or `npm run stop:backend`.
+
+## Users (local development)
+
+Defined in `backend/apps/auth-service/.env` → `AUTH_LOCAL_USERS` (JSON). Each user has:
+
+| Field | Meaning |
+|-------|---------|
+| `roles` | `sales` · `pl_head` · `presales` (decides the screens) · `admin` (uses the vertical picked on the sign-in screen) |
+| `userId` | numeric business id (owner of leads / opportunities) |
+| `approvalActorId` | approval-service actor (`actor-sales-manager`, `actor-pnl-head`) — needed to submit or decide lead approvals |
+
+Default accounts: `sales@dealpulse.demo`, `plhead@dealpulse.demo`, `solution@dealpulse.demo` (password in the `.env`).
+
+The frontend sends the signed-in user to the services as `x-user-id` / `x-changed-by` / `x-actor-id` (development identity; production must take identity from the IAM session at the gateway).
+
+## End-to-end workflow (what is wired)
+
+| Step | Screen | Service(s) |
+|------|--------|------------|
+| Lead create / edit / status | Leads, Lead detail | lead-service |
+| Submit for approval → approve / more work / reject | Lead → Approval tab | approval-service → lead-service (approve creates the opportunity via opportunity-service) |
+| RFP lead → synopsis → Pre-Sales accept / return | RFP synopsis | rfp-service → opportunity-service + lead-service |
+| Opportunity details, stages, hold / close / reopen, fallback, commercials, PO receipt, history | Opportunity | opportunity-service |
+| Documents | Opportunity → Documents / PO | document-service + MinIO |
+| Pre-PO evaluations | Pre-PO, Opportunity tab | opportunity-service (`/opportunity-evaluations`) |
+| Sales recommendation → P&L Proceed / Reject | Opportunity → Proposal & decision, P&L decisions | opportunity-service (`/opportunity-decisions`) |
+| Compliance matrix → SME review → sign-off | Compliance | compliance-service |
+| Dashboards | Dashboard (per role) | computed from the loaded data |
+
+Out of scope (placeholders in the UI): Post-PO, RFP auto-extraction (needs Redis workers), contact / mailbox pickers (Microsoft Graph), Teams messages (in-app simulation only).

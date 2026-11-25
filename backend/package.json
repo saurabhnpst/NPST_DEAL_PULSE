@@ -52,13 +52,15 @@
     "infra:up": "docker compose -f docker-compose.local.yml up -d",
     "infra:down": "docker compose -f docker-compose.local.yml down",
     "infra:wait": "node scripts/wait-for-port.mjs 127.0.0.1 9000 MinIO && node scripts/wait-for-port.mjs 127.0.0.1 3310 ClamAV",
+    "minio": "node scripts/start-minio.mjs",
     "e2e:pdf": "node scripts/e2e-pdf-workflow.mjs",
     "db:ensure": "node scripts/ensure-database.mjs",
     "ports:check": "node scripts/port-audit.mjs",
     "start:all": "node scripts/start-all.mjs",
     "stop:all": "node scripts/stop-all.mjs",
     "smoke:gateway": "node scripts/phase1-smoke.mjs",
-    "smoke:phase3": "node scripts/phase3-smoke.mjs"
+    "smoke:phase3": "node scripts/phase3-smoke.mjs",
+    "seed:compliance": "node scripts/seed-compliance-standard.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1172.0",

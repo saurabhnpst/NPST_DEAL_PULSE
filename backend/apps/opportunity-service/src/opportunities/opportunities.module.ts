@@ -32,6 +32,12 @@ import { OpportunityFallbackController } from '../fallback/opportunity-fallback.
 import { OpportunityFallbackService } from '../fallback/opportunity-fallback.service';
 import { ExternalReferencesService } from '../integrations/external-references.service';
 import { OpportunityEventPublisher } from '../events/opportunity-event.publisher';
+import { OpportunityDecision } from '../entities/opportunity-decision.entity';
+import { OpportunityEvaluation } from '../entities/opportunity-evaluation.entity';
+import { OpportunityDecisionsController } from '../decisions/opportunity-decisions.controller';
+import { OpportunityDecisionsService } from '../decisions/opportunity-decisions.service';
+import { OpportunityEvaluationsController } from '../evaluations/opportunity-evaluations.controller';
+import { OpportunityEvaluationsService } from '../evaluations/opportunity-evaluations.service';
 
 @Module({
   imports: [
@@ -43,6 +49,8 @@ import { OpportunityEventPublisher } from '../events/opportunity-event.publisher
       OpportunityCommercialHistory,
       OpportunityActivity,
       OpportunityDomainEvent,
+      OpportunityDecision,
+      OpportunityEvaluation,
     ]),
   ],
   controllers: [
@@ -56,6 +64,8 @@ import { OpportunityEventPublisher } from '../events/opportunity-event.publisher
     OpportunityPoController,
     OpportunityHistoryController,
     OpportunityFallbackController,
+    OpportunityDecisionsController,
+    OpportunityEvaluationsController,
   ],
   providers: [
     OpportunitiesService,
@@ -73,6 +83,8 @@ import { OpportunityEventPublisher } from '../events/opportunity-event.publisher
     OpportunityFallbackService,
     ExternalReferencesService,
     OpportunityEventPublisher,
+    OpportunityDecisionsService,
+    OpportunityEvaluationsService,
   ],
 })
 export class OpportunitiesModule {}

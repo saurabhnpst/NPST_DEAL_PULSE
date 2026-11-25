@@ -5,3 +5,5 @@ export { OpportunityCommercialHistory } from './opportunity-commercial-history.e
 export { OpportunityActivity } from './opportunity-activity.entity';
 export { OpportunityPublicIdSequence } from './opportunity-public-id-sequence.entity';
 export { OpportunityDomainEvent } from './opportunity-domain-event.entity';
+export { OpportunityDecision } from './opportunity-decision.entity';
+export { OpportunityEvaluation } from './opportunity-evaluation.entity';

@@ -25,7 +25,7 @@ export class VersionsService {
     }
 
     const validated = await this.ingestion.validateAndScan(file);
-    const scanStatus = 'CLEAN';
+    const scanStatus = this.ingestion.scanStatusLabel();
     const savedVersion = await this.ingestion.createNewVersion(
       documentId,
       validated,

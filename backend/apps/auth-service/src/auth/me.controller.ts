@@ -14,6 +14,9 @@ export interface MeResponse {
   roles: string[];
   permissions: string[];
   tenantId: string;
+  /** Numeric business user id (sent as x-user-id). */
+  id: string;
+  approvalActorId: string | null;
 }
 
 @Controller('api/me')
@@ -46,6 +49,8 @@ export class MeController {
       name: profile?.name ?? record.userId,
       roles: profile?.roles ?? [],
       permissions: record.permissions,
+      id: profile?.userId ?? record.userId,
+      approvalActorId: profile?.approvalActorId ?? null,
     };
   }
 }

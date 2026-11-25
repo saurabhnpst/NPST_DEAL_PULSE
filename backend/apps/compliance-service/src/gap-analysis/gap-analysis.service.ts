@@ -120,10 +120,10 @@ export class GapAnalysisService {
     const framework = req?.framework;
     return {
       matrixEntryId: line.id,
-      requirementId: req?.id ?? line.requirement.id,
+      requirementId: req?.id ?? null, // null for a custom matrix row
       requirementCode: line.requirementCode,
       requirementTitle: line.requirementTitle,
-      category: req?.category ?? null,
+      category: req?.category ?? line.category ?? null,
       frameworkId: framework?.id ?? null,
       frameworkCode: framework?.code ?? null,
       frameworkName: framework?.name ?? null,

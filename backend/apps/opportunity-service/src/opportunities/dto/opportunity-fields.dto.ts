@@ -11,7 +11,7 @@ import {
   YesNoField,
 } from '../../common/validation';
 import { HOLD_REASONS, LOST_REASONS } from '../../stages/stage-definitions';
-import { DealTeamMemberDto, StageTaskDto } from './stage-task.dto';
+import { DealTeamMemberDto, DocumentReviewDto, StageTaskDto } from './stage-task.dto';
 
 /**
  * Optional opportunity fields shared by create and update.
@@ -162,4 +162,10 @@ export class OpportunityFieldsDto {
   @ValidateNested({ each: true })
   @Type(() => DealTeamMemberDto)
   dealTeam?: DealTeamMemberDto[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => DocumentReviewDto)
+  reviews?: DocumentReviewDto[] | null;
 }

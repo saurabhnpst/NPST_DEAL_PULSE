@@ -33,8 +33,16 @@ export class DocumentIngestionService {
     private readonly versionRepository: Repository<DocumentVersion>,
   ) {}
 
+  /** Scan status to store with the file: CLEAN, or SKIPPED when CLAMAV_ENABLED=false (local dev). */
+  scanStatusLabel(): string {
+    return process.env.CLAMAV_ENABLED === 'false' ? 'SKIPPED' : 'CLEAN';
+  }
+
   async validateAndScan(file: Express.Multer.File): Promise<ValidatedUploadFile> {
     const validated = await this.fileValidation.validate(file);
+    if (process.env.CLAMAV_ENABLED === 'false') {
+      return validated;
+    }
     const scanResult = await this.clamav.scan(validated.buffer);
     if (scanResult !== 'CLEAN') {
       throw new BadRequestException('File rejected: malware detected');

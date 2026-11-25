@@ -1,5 +1,5 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsIn, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 import { MatrixComplianceStatus } from '../../common/enums/matrix-compliance-status.enum';
 
 export class UpdateMatrixEntryDto {
@@ -26,4 +26,52 @@ export class UpdateMatrixEntryDto {
   @IsOptional()
   @IsString()
   reviewerObservations?: string;
+
+  @ApiPropertyOptional({ enum: ['Pending', 'Approved', 'Rejected'], description: 'SME review of this row' })
+  @IsOptional()
+  @IsIn(['Pending', 'Approved', 'Rejected'])
+  reviewStatus?: string;
+
+  @ApiPropertyOptional({ example: 'M' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  criticality?: string;
+
+  @ApiPropertyOptional({ example: 'Security' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  category?: string;
+}
+
+/** Custom matrix row (not from the requirement library). */
+export class AddMatrixEntryDto {
+  @ApiPropertyOptional({ example: 'SIEM monitoring' })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(500)
+  title: string;
+
+  @ApiPropertyOptional({ example: 'S' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  criticality?: string;
+
+  @ApiPropertyOptional({ example: 'Security' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  category?: string;
+
+  @ApiPropertyOptional({ enum: MatrixComplianceStatus })
+  @IsOptional()
+  @IsEnum(MatrixComplianceStatus)
+  complianceStatus?: MatrixComplianceStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  notes?: string;
 }

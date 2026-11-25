@@ -6,13 +6,13 @@ import BrandLockup, { ArrowMark } from '../components/Brand.jsx';
 export default function Login() {
   const { login } = useAuth();
   const [v, setV] = useState('sales');
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(VERTICALS.sales.user.email);
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [forgot, setForgot] = useState(false);
   const [sent, setSent] = useState(false);
 
-  const pick = (k) => { setV(k); setErr(''); };
+  const pick = (k) => { setV(k); setEmail(VERTICALS[k].user.email); setErr(''); };
   const submit = async (e) => {
     e.preventDefault();
     setErr('');
@@ -63,7 +63,7 @@ export default function Login() {
               <button type="button" className="btn" style={{ border: 0, color: '#214C98' }} onClick={() => setForgot(true)}>Forgot password?</button>
             </div>
             <button type="submit" className="btn-p" style={{ minHeight: 44 }}>Sign in as {VERTICALS[v].label}</button>
-            <p className="defaults">Sign in with your Command Module account (e.g. <b className="mono">admin</b> in development). Vertical selection still controls DealPlus demo permissions until IAM registers DealPlus roles.</p>
+            <p className="defaults">Choosing a vertical fills in its account email. Your account's role decides which screens you see.</p>
           </form>
         ) : (
           <div className="col gap16" style={{ width: '100%', maxWidth: 400 }}>

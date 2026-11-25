@@ -4,18 +4,16 @@ import { useAuth } from '../store/Auth.jsx';
 import { useStore, fmtDate } from '../store/Store.jsx';
 import { OPEN_STAGES, isTender } from '../data/defaults.js';
 import { STANDARD_COMPLIANCE } from '../data/complianceTemplates.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { PRESALES_OPTIONS } from '../data/peopleOptions.js';
+import { POSITIONS, addRow, deleteRow, signOffMatrix, startMatrix, updateRow } from '../services/workflowService.js';
 import { Badge, Drawer, Pills, Stepper, Toast } from '../components/ui.jsx';
 import { useTeams, TeamsBadge } from '../components/Teams.jsx';
 
 const EXPERT_ROLES = ['Product', 'Security', 'Legal', 'Compliance', 'Architecture'];
-/** SME roster per role — populated from assignment APIs when available. */
-const EXPERTS = {
-  Product: [],
-  Security: [],
-  Legal: [],
-  Compliance: [],
-  Architecture: [],
-};
+/** SME roster per role — Pre-Sales users from the user directory (until assignment APIs expose SME rosters). */
+const experts = () => PRESALES_OPTIONS.filter((n) => n !== '—');
+const EXPERTS = new Proxy({}, { get: () => experts() });
 const personOf = (x) => (x || '').split(' · ')[0];
 const nowTime = () => new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -41,7 +39,10 @@ const RISK_TONE = { Low: 'green', Medium: 'amber', High: 'red' };
 
 export default function Compliance() {
   const { user, can } = useAuth();
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
+  const { reloadWorkflow } = useBusinessData();
+  /** API change → reload matrices → toast (or the error). */
+  const run = async (fn, msg) => { try { await fn(); await reloadWorkflow(); say(msg); return true; } catch (e) { say(e?.message || 'Save failed'); return false; } };
   const meta = state.complianceMeta || {};
   const [domain, setDomain] = useState('All');
   const [q, setQ] = useState('');
@@ -99,7 +100,7 @@ export default function Compliance() {
             items={done} empty="No signed-off matrices yet." onOpen={(id) => { setSelId(id); setSrc('All'); }} completed />
         </>
       ) : (
-        <Workspace p={sel} src={src} setSrc={setSrc} can={can} user={user} dispatch={dispatch} say={say} teams={teams} onBack={() => setSelId(null)} />
+        <Workspace p={sel} src={src} setSrc={setSrc} can={can} user={user} run={run} say={say} teams={teams} onBack={() => setSelId(null)} />
       )}
 
       {lib && (
@@ -166,20 +167,21 @@ function ProjectCard({ p, onOpen, completed }) {
   );
 }
 
-function Workspace({ p, src, setSrc, can, user, dispatch, say, teams, onBack }) {
+function Workspace({ p, src, setSrc, can, user, run, say, teams, onBack }) {
   const [add, setAdd] = useState(null);
   const [delRow, setDelRow] = useState(null);
   const blank = { name: '', kind: 'M', team: 'Product', assignee: EXPERTS.Product[0], ev: '' };
   const saveRow = () => {
     const who = personOf(add.assignee);
     const m = teams(who, `Your approval and response are needed on a compliance requirement for ${p.o.name} (${p.o.account}): “${add.name.trim()}” (${add.team}). Please reply with our answer and proof document.`, { kind: 'Compliance', ctx: p.o.name, link: '/compliance' });
-    dispatch({ type: 'COMPLIANCE_ADD', oppId: p.o.id, row: { name: add.name.trim(), kind: add.kind, team: add.team, assignee: who, pos: 'Awaiting response', ev: add.ev.trim(), rev: 'Pending', teamsAt: m.time } });
-    setAdd(null); say(`Requirement added · ${who} tagged on Teams`);
+    run(() => addRow(p.meta.assessmentId, { name: add.name.trim(), kind: add.kind, team: add.team, ev: add.ev.trim() }), `Requirement added · ${who} tagged on Teams (${m.time})`).then((ok) => ok && setAdd(null));
   };
   const step = !p.total ? 0 : p.approved === p.total ? 3 : p.rows.some((r) => r.rev !== 'Pending') ? 2 : 1;
   const rows = p.rows.filter((r) => src === 'All' || (src === 'Asked in RFP' ? r.kind === 'M' : r.kind === 'S'));
   const locked = p.signed;
-  const setRev = (id, rev) => dispatch({ type: 'COMPLIANCE', id, rev });
+  const rowById = (id) => p.rows.find((r) => r.id === id);
+  const setRev = (id, rev) => run(() => updateRow(rowById(id), { reviewStatus: rev }), `Line ${rev.toLowerCase()}`);
+  const setPos = (r, pos) => run(() => updateRow(r, { complianceStatus: POSITIONS[pos] }), 'Answer saved');
 
   return (
     <>
@@ -215,17 +217,17 @@ function Workspace({ p, src, setSrc, can, user, dispatch, say, teams, onBack }) 
             <p className="s12 muted" style={{ margin: 0 }}>{STEPS[step]} · {p.pending ? `${p.pending} line${p.pending > 1 ? 's' : ''} awaiting expert review` : 'all lines decided'}</p>
             {can.approveCompliance && !locked && p.approved === p.total && (
               <div className="ok row between wrap gap8"><span>Every line is approved. Sign off the matrix to move it to Completed projects.</span>
-                <button className="btn-ok" onClick={() => { dispatch({ type: 'SIGNOFF_COMPLIANCE', oppId: p.o.id, who: user.name }); say('Matrix signed off · moved to Completed projects'); }}>Sign off matrix</button></div>
+                <button className="btn-ok" onClick={() => run(() => signOffMatrix(p.meta, `Signed off by ${user.name}`), 'Matrix signed off · moved to Completed projects')}>Sign off matrix</button></div>
             )}
             {can.approveCompliance && locked && (
               <div className="banner row between wrap gap8"><span>Signed off by {p.meta.signedBy} on {p.meta.signedOff}. The matrix is locked.</span>
-                <button className="btn" onClick={() => { dispatch({ type: 'SIGNOFF_COMPLIANCE', oppId: p.o.id, undo: true, who: user.name }); say('Matrix reopened for changes'); }}>Reopen for changes</button></div>
+</div>
             )}
           </>
         ) : (
           <div className="col gap10">
             <p className="muted s14" style={{ margin: 0 }}>No compliance matrix has been started for this tender yet.</p>
-            {can.approveCompliance && <div className="row gap8 wrap"><button className="btn-p" onClick={() => { dispatch({ type: 'START_COMPLIANCE', oppId: p.o.id, rows: STANDARD_COMPLIANCE }); Array.from(new Set(STANDARD_COMPLIANCE.map((r) => r[2]))).forEach((t) => teams(`${t} team`, `New compliance matrix for ${p.o.name} (${p.o.account}) — please review the ${t} lines.`, { kind: 'Compliance', ctx: p.o.name, link: '/compliance' })); say('Matrix started · expert teams notified on Teams'); }}>Start with standard lines</button>{!add && <button className="btn" onClick={() => setAdd(blank)}>+ Add requirement</button>}</div>}
+            {can.approveCompliance && <div className="row gap8 wrap"><button className="btn-p" onClick={() => { run(() => startMatrix(p.o), 'Matrix started · expert teams notified on Teams'); Array.from(new Set(STANDARD_COMPLIANCE.map((r) => r[2]))).forEach((t) => teams(`${t} team`, `New compliance matrix for ${p.o.name} (${p.o.account}) — please review the ${t} lines.`, { kind: 'Compliance', ctx: p.o.name, link: '/compliance' })); }}>Start with standard lines</button></div>}
           </div>
         )}
       </section>
@@ -264,7 +266,9 @@ function Workspace({ p, src, setSrc, can, user, dispatch, say, teams, onBack }) 
                     <td className="w500">{r.name}</td>
                     <td><Badge tone={r.kind === 'M' ? 'blue' : 'amber'}>{r.kind === 'M' ? 'Asked in RFP' : 'Added by system'}</Badge></td>
                     <td>{r.team}{r.assignee && <div className="s12 muted">Assigned to {r.assignee}</div>}{r.teamsAt && <TeamsBadge to={r.assignee || `${r.team} team`} at={r.teamsAt} />}</td>
-                    <td>{r.pos === 'Awaiting response' ? <span className="s12 muted">Awaiting response</span> : <Badge>{r.pos}</Badge>}</td>
+                    <td>{can.approveCompliance && !locked
+                      ? <select className="in sm" aria-label={'Our answer for ' + r.name} value={POSITIONS[r.pos] ? r.pos : ''} onChange={(e) => setPos(r, e.target.value)}><option value="" disabled>Awaiting response</option>{Object.keys(POSITIONS).map((x) => <option key={x}>{x}</option>)}</select>
+                      : r.pos === 'Awaiting response' ? <span className="s12 muted">Awaiting response</span> : <Badge>{r.pos}</Badge>}</td>
                     <td style={{ color: r.ev ? undefined : '#A3221A' }}>{r.ev || 'Needs upload'}</td>
                     <td><Badge>{r.rev}</Badge></td>
                     <td>
@@ -277,7 +281,7 @@ function Workspace({ p, src, setSrc, can, user, dispatch, say, teams, onBack }) 
                       {can.approveCompliance && !locked && r.rev !== 'Pending' && <button className="btn" style={{ minHeight: 32 }} onClick={() => setRev(r.id, 'Pending')}>Undo</button>}
                       {(!can.approveCompliance || locked) && <span className="s12 muted">{locked ? 'Locked' : 'Read-only'}</span>}
                       {can.approveCompliance && !locked && (delRow === r.id
-                        ? <div className="row gap6" style={{ marginTop: 6 }}><span className="s12">Delete?</span><button className="btn-d" style={{ minHeight: 28, padding: '0 10px' }} onClick={() => { dispatch({ type: 'COMPLIANCE_DELETE', id: r.id }); setDelRow(null); say('Requirement deleted'); }}>Yes</button><button className="btn" style={{ minHeight: 28 }} onClick={() => setDelRow(null)}>No</button></div>
+                        ? <div className="row gap6" style={{ marginTop: 6 }}><span className="s12">Delete?</span><button className="btn-d" style={{ minHeight: 28, padding: '0 10px' }} onClick={() => { run(() => deleteRow(r), 'Requirement deleted'); setDelRow(null); }}>Yes</button><button className="btn" style={{ minHeight: 28 }} onClick={() => setDelRow(null)}>No</button></div>
                         : <button className="link-del" aria-label={'Delete ' + r.name} onClick={() => setDelRow(r.id)}>Delete</button>)}
                     </td>
                   </tr>

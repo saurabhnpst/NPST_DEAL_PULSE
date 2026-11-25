@@ -38,6 +38,10 @@ export interface RejectApprovalInput {
   reason: string;
 }
 
+export interface RequestChangesInput {
+  comment: string;
+}
+
 export function parseSubmitApprovalInput(value: unknown): SubmitApprovalInput {
   const record = requireRecord(value);
   return {
@@ -81,6 +85,12 @@ export function parseApproveApprovalInput(value: unknown): ApproveApprovalInput 
   const record = requireRecord(value ?? {});
   const comment = optionalNonEmptyString(record['comment'], 'comment');
   return comment === undefined ? {} : { comment };
+}
+
+/** "More work needed" requires a comment (what Sales must fix). */
+export function parseRequestChangesInput(value: unknown): RequestChangesInput {
+  const record = requireRecord(value);
+  return { comment: requireNonEmptyString(record['comment'], 'comment') };
 }
 
 export function parseRejectApprovalInput(value: unknown): RejectApprovalInput {

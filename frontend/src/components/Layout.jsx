@@ -1,11 +1,11 @@
 import { NavLink, useLocation, useNavigate } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
-import { NAV_ITEMS, VERTICALS } from '../data/verticals.js';
+import { NAV_ITEMS } from '../data/verticals.js';
 import { TeamsToasts } from './Teams.jsx';
 import BrandLockup from './Brand.jsx';
 
 export default function Layout({ children }) {
-  const { vertical, user, logout, switchTo } = useAuth();
+  const { vertical, user, logout } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
   const items = NAV_ITEMS.filter((n) => vertical.nav.includes(n.path));
@@ -37,11 +37,6 @@ export default function Layout({ children }) {
               onKeyDown={(e) => { if (e.key === 'Enter' && e.currentTarget.value) nav('/opportunities?q=' + encodeURIComponent(e.currentTarget.value)); }} />
           </label>
           <div className="grow" />
-          <label className="row gap8 s12 muted" title="Development-only vertical permissions">View as
-            <select className="in sm" value={vertical.key} onChange={(e) => { switchTo(e.target.value); nav('/'); }}>
-              {Object.values(VERTICALS).map((v) => <option key={v.key} value={v.key}>{v.label}</option>)}
-            </select>
-          </label>
           <div className="row gap10">
             <div className="avatar">{user.initials}</div>
             <div className="lh12"><div className="s14 w600">{user.name}</div><div className="s12 muted">{user.title}</div></div>

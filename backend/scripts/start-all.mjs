@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Start API Gateway + 7 microservices with labeled logs (concurrently).
- * Does not start Docker infra — run `npm run infra:up` first if needed.
+ * Start MinIO + auth-service + API Gateway + 7 microservices with labeled logs (concurrently).
+ * No Docker or Redis needed for local development.
  */
 import { spawn } from 'child_process';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
@@ -21,11 +21,13 @@ function readGatewayPort() {
 }
 
 const gatewayPort = readGatewayPort();
-const names = 'auth,gateway,leads,opps,rfp,docs,approval,assign,compliance';
-const colors = 'magenta,blue,green,yellow,cyan,red,white,gray,brightBlack';
+const names = 'minio,auth,gateway,leads,opps,rfp,docs,approval,assign,compliance';
+const colors = 'brightBlue,magenta,blue,green,yellow,cyan,red,white,gray,brightBlack';
+// Gateway reads PORT from apps/api-gateway/.env (no shell-specific `PORT=` prefix, so this works on Windows too).
 const quoted = [
+  'node scripts/start-minio.mjs',
   'npm run start:auth',
-  `PORT=${gatewayPort} npm run start:gateway`,
+  'npm run start:gateway',
   'npm run start:leads',
   'npm run start:opportunities',
   'npm run start:rfp',
