@@ -53,7 +53,12 @@
     "infra:down": "docker compose -f docker-compose.local.yml down",
     "infra:wait": "node scripts/wait-for-port.mjs 127.0.0.1 9000 MinIO && node scripts/wait-for-port.mjs 127.0.0.1 3310 ClamAV",
     "e2e:pdf": "node scripts/e2e-pdf-workflow.mjs",
-    "db:ensure": "node scripts/ensure-database.mjs"
+    "db:ensure": "node scripts/ensure-database.mjs",
+    "ports:check": "node scripts/port-audit.mjs",
+    "start:all": "node scripts/start-all.mjs",
+    "stop:all": "node scripts/stop-all.mjs",
+    "smoke:gateway": "node scripts/phase1-smoke.mjs",
+    "smoke:phase3": "node scripts/phase3-smoke.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1172.0",
@@ -68,15 +73,17 @@
     "bullmq": "^6.7.8",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",
+    "concurrently": "^9.2.5",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.6.1",
-    "http-proxy-middleware": "^3.0.5",
     "file-type": "^16.5.4",
+    "http-proxy-middleware": "^3.0.5",
     "ioredis": "^5.11.1",
     "mysql2": "^3.24.6",
     "pdfjs-dist": "^6.5.438",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "swagger-ui-express": "^5.0.1",
     "typeorm": "^0.3.31"
   },
   "devDependencies": {
@@ -89,6 +96,7 @@
     "@types/multer": "^2.3.0",
     "@types/node": "^20.14.0",
     "@types/supertest": "^6.0.2",
+    "@types/swagger-ui-express": "^4.1.8",
     "jest": "^29.7.0",
     "supertest": "^7.0.0",
     "ts-jest": "^29.2.5",

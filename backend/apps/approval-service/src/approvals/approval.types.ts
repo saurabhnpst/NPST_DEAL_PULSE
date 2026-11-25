@@ -1,6 +1,7 @@
 import { HistoryActorRole } from '../shared/roles';
 
 export const APPROVAL_STATUSES = [
+  'PENDING',
   'PENDING_PNL_HEAD',
   'PENDING_SALES_MANAGER',
   'APPROVED',
@@ -9,16 +10,19 @@ export const APPROVAL_STATUSES = [
 
 export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
 
-export type ApprovalAuthorityRole = 'PNL_HEAD' | 'SALES_MANAGER';
+export type ApprovalAuthorityRole = 'ASSIGNED' | 'PNL_HEAD' | 'SALES_MANAGER';
 
 export const ACTIVE_APPROVAL_STATUSES: readonly ApprovalStatus[] = [
+  'PENDING',
   'PENDING_PNL_HEAD',
   'PENDING_SALES_MANAGER',
 ];
 
 export const APPROVAL_HISTORY_TYPES = [
   'SUBMITTED',
+  'APPROVER_SELECTED',
   'AUTHORITY_TRANSFERRED',
+  'REASSIGNED',
   'APPROVED',
   'REJECTED',
   'DECISION_BLOCKED',

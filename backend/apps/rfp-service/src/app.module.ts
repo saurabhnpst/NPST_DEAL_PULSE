@@ -2,8 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { buildMysqlSslFromEnv, findBackendRoot } from '../../../libs/service-config/src';
 import documentServiceConfig from './config/document-service.config';
 import informationExtractionConfig from './config/information-extraction.config';
 import pdfProcessingConfig from './config/pdf-processing.config';
@@ -55,16 +54,7 @@ import { RfpsModule } from './rfps/rfps.module';
         database: config.getOrThrow('DB_NAME'),
         autoLoadEntities: true,
         synchronize: false,
-        ssl: (() => {
-          const sslCa = config.get<string>('DB_SSL_CA');
-          if (!sslCa) {
-            return undefined;
-          }
-          return {
-            ca: readFileSync(resolve(process.cwd(), sslCa)),
-            rejectUnauthorized: true,
-          };
-        })(),
+        ssl: buildMysqlSslFromEnv(findBackendRoot(process.cwd()), process.env),
       }),
     }),
     RfpsModule,

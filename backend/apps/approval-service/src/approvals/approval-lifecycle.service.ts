@@ -1,12 +1,23 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { ApproveApprovalInput, RejectApprovalInput, SubmitApprovalInput } from '../dto/approval.dto';
-import { APPROVAL_REPOSITORY, ApprovalRepository } from './approval.repository';
+import {
+  ApproveApprovalInput,
+  ReassignApprovalInput,
+  RejectApprovalInput,
+  SubmitApprovalInput,
+} from '../dto/approval.dto';
+import {
+  APPROVAL_REPOSITORY,
+  ApprovalListFilter,
+  ApprovalRepository,
+} from './approval.repository';
 import {
   ACTIVE_APPROVAL_STATUSES,
+  ApprovalAuthorityRole,
   ApprovalHistoryEvent,
   ApprovalHistoryType,
   ApprovalRequest,
+  ApprovalStatus,
 } from './approval.types';
 import { Decision, PendingDecisionView } from '../decisions/decision.types';
 import { MockActor } from '../mock/actor.types';
@@ -56,7 +67,6 @@ export class ApprovalLifecycleService {
     if (active !== undefined) {
       throw conflictError('Active approval already exists for lead');
     }
-    const mapping = await this.requireMapping(input.productVertical);
     await this.assignments.saveLeadAssignment({
       leadId: input.leadId,
       creatorId: input.creatorId,
@@ -64,11 +74,15 @@ export class ApprovalLifecycleService {
       teamId: input.teamId,
       territoryId: input.territoryId,
     });
-    return this.createApproval(input, mapping.pnlHeadId, mapping.salesManagerId);
+    const initial = await this.resolveInitialApprover(input);
+    return this.createApproval(input, initial);
   }
 
-  async listApprovals(actor: MockActor): Promise<ApprovalRequest[]> {
-    const approvals = await this.repository.listApprovals();
+  async listApprovals(
+    actor: MockActor,
+    filter?: ApprovalListFilter,
+  ): Promise<ApprovalRequest[]> {
+    const approvals = await this.repository.listApprovals(filter);
     const current = await Promise.all(approvals.map((item) => this.applyDueEscalation(item)));
     return current.filter((item) => this.canRead(item, actor));
   }
@@ -111,6 +125,50 @@ export class ApprovalLifecycleService {
       outcome: 'REJECTED',
       idempotencyKey,
       reason: input.reason,
+    });
+  }
+
+  async reassign(
+    id: string,
+    actor: MockActor,
+    input: ReassignApprovalInput,
+    idempotencyKey: string,
+  ): Promise<ApprovalRequest> {
+    const current = await this.findWithEscalation(id);
+    if (!ACTIVE_APPROVAL_STATUSES.includes(current.status)) {
+      throw conflictError('Only pending requests can be reassigned');
+    }
+    if (!this.policy.canReassign(actor, current)) {
+      throw forbiddenError('Reassignment denied for this actor');
+    }
+    if (input.newApproverId === current.currentApproverId) {
+      throw conflictError('New approver matches current approver');
+    }
+    const now = this.clock.now();
+    const updated: ApprovalRequest = {
+      ...current,
+      status: 'PENDING',
+      currentAuthorityRole: 'ASSIGNED',
+      currentApproverId: input.newApproverId,
+      updatedAt: now.toISOString(),
+    };
+    const history = this.historyEvent(
+      id,
+      'REASSIGNED',
+      actor.actorId,
+      actor.role,
+      idempotencyKey,
+      now,
+      undefined,
+      current.currentApproverId,
+      input.newApproverId,
+      input.comment,
+    );
+    return this.repository.commitReassign({
+      approvalId: id,
+      expectedVersion: current.version,
+      approval: updated,
+      history,
     });
   }
 
@@ -166,10 +224,29 @@ export class ApprovalLifecycleService {
     return results.filter((item, index) => item.version !== approvals[index]?.version).length;
   }
 
+  private async resolveInitialApprover(input: SubmitApprovalInput): Promise<{
+    approverId: string;
+    status: ApprovalStatus;
+    role: ApprovalAuthorityRole;
+  }> {
+    if (input.nextApproverId) {
+      return {
+        approverId: input.nextApproverId,
+        status: 'PENDING',
+        role: 'ASSIGNED',
+      };
+    }
+    const mapping = await this.requireMapping(input.productVertical);
+    return {
+      approverId: mapping.pnlHeadId,
+      status: 'PENDING_PNL_HEAD',
+      role: 'PNL_HEAD',
+    };
+  }
+
   private async createApproval(
     input: SubmitApprovalInput,
-    pnlHeadId: string,
-    salesManagerId: string,
+    initial: { approverId: string; status: ApprovalStatus; role: ApprovalAuthorityRole },
   ): Promise<ApprovalRequest> {
     const now = this.clock.now();
     const approval: ApprovalRequest = {
@@ -179,10 +256,10 @@ export class ApprovalLifecycleService {
       productVertical: input.productVertical,
       teamId: input.teamId,
       territoryId: input.territoryId,
-      status: 'PENDING_PNL_HEAD',
-      currentAuthorityRole: 'PNL_HEAD',
-      currentApproverId: pnlHeadId,
-      originalApproverId: pnlHeadId,
+      status: initial.status,
+      currentAuthorityRole: initial.role,
+      currentApproverId: initial.approverId,
+      originalApproverId: initial.approverId,
       submissionIdempotencyKey: input.idempotencyKey,
       expiresAt: new Date(now.getTime() + this.config.escalationWindowMs).toISOString(),
       submittedAt: now.toISOString(),
@@ -197,7 +274,23 @@ export class ApprovalLifecycleService {
       input.idempotencyKey,
       now,
     );
-    const stored = await this.repository.submit({ approval, history });
+    const extraHistory =
+      input.nextApproverId === undefined
+        ? []
+        : [
+            this.historyEvent(
+              approval.id,
+              'APPROVER_SELECTED',
+              input.creatorId,
+              input.creatorRole,
+              `select:${input.idempotencyKey}`,
+              now,
+              undefined,
+              undefined,
+              input.nextApproverId,
+            ),
+          ];
+    const stored = await this.repository.submit({ approval, history, extraHistory });
     await this.publish('approval.submitted.v1', stored, {
       creatorId: input.creatorId,
       productVertical: input.productVertical,
@@ -268,6 +361,9 @@ export class ApprovalLifecycleService {
   }
 
   private async applyDueEscalation(approval: ApprovalRequest): Promise<ApprovalRequest> {
+    if (approval.status === 'PENDING' && approval.currentAuthorityRole === 'ASSIGNED') {
+      return approval;
+    }
     if (
       !ACTIVE_APPROVAL_STATUSES.includes(approval.status) ||
       !this.config.escalationEnabled ||
@@ -378,6 +474,7 @@ export class ApprovalLifecycleService {
     decision?: Decision,
     previousApproverId?: string,
     newApproverId?: string,
+    commentText?: string,
   ): ApprovalHistoryEvent {
     return {
       id: randomUUID(),
@@ -387,6 +484,7 @@ export class ApprovalLifecycleService {
       actorRole,
       timestamp: timestamp.toISOString(),
       idempotencyKey,
+      ...(commentText !== undefined ? { comment: commentText } : {}),
       ...(decision?.comment === undefined ? {} : { comment: decision.comment }),
       ...(decision?.reason === undefined ? {} : { reason: decision.reason }),
       ...(previousApproverId === undefined ? {} : { previousApproverId }),

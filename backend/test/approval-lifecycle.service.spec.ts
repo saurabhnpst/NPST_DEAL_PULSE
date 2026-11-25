@@ -567,6 +567,56 @@ describe('approval lifecycle', () => {
     assertEqual(repeated.id, first.id, 'alias decision id');
   });
 
+  it('creates a pending request when next approver is supplied', async () => {
+    const harness = createHarness();
+    const approval = await harness.service.submit({
+      ...harness.input,
+      nextApproverId: MOCK_ACTOR_IDS.pnlHead,
+      idempotencyKey: 'submit-explicit',
+    });
+    assertEqual(approval.status, 'PENDING', 'status');
+    assertEqual(approval.currentAuthorityRole, 'ASSIGNED', 'authority');
+    const history = await harness.service.getHistory(approval.id, harness.creatorActor);
+    assertContains(history.map((item) => item.type), 'APPROVER_SELECTED', 'history types');
+  });
+
+  it('reassigns a pending request and records previous approver', async () => {
+    const harness = createHarness();
+    const approval = await harness.service.submit({
+      ...harness.input,
+      nextApproverId: MOCK_ACTOR_IDS.pnlHead,
+      idempotencyKey: 'submit-reassign',
+    });
+    const updated = await harness.service.reassign(
+      approval.id,
+      harness.creatorActor,
+      { newApproverId: MOCK_ACTOR_IDS.salesManager, comment: 'Temporary cover' },
+      'reassign-1',
+    );
+    assertEqual(updated.currentApproverId, MOCK_ACTOR_IDS.salesManager, 'approver');
+    const history = await harness.service.getHistory(approval.id, harness.creatorActor);
+  const reassigned = history.find((item) => item.type === 'REASSIGNED');
+    assertTrue(reassigned !== undefined, 'reassigned history expected');
+    assertEqual(reassigned?.previousApproverId, MOCK_ACTOR_IDS.pnlHead, 'previous approver');
+    assertEqual(reassigned?.newApproverId, MOCK_ACTOR_IDS.salesManager, 'new approver');
+  });
+
+  it('rejects decisions on terminal requests', async () => {
+    const harness = createHarness();
+    const approval = await harness.service.submit(harness.input);
+    await harness.service.approve(approval.id, harness.pnlActor, {}, 'terminal-1');
+    await expectDomainError(
+      harness.service.reassign(
+        approval.id,
+        harness.creatorActor,
+        { newApproverId: MOCK_ACTOR_IDS.salesManager },
+        'reassign-terminal',
+      ),
+      'CONFLICT',
+      409,
+    );
+  });
+
   it('rejects blank and non-object request bodies', async () => {
     await expectDomainError(
       Promise.resolve().then(() => parseRejectApprovalInput({ reason: '   ' })),

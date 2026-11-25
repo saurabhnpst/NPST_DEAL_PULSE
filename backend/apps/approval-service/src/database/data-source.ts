@@ -1,8 +1,4 @@
-import { config as loadEnv } from 'dotenv';
-import { resolve } from 'path';
 import { DataSource } from 'typeorm';
-import { loadDatabaseConfig } from './database-config';
+import { buildDataSourceOptions } from '../config/database.config';
 
-loadEnv({ path: resolve(__dirname, '../../.env') });
-
-export const approvalDataSource = new DataSource(loadDatabaseConfig());
+export const approvalDataSource = new DataSource(buildDataSourceOptions(__dirname));

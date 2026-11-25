@@ -5,8 +5,10 @@ import {
   ACTIVE_APPROVAL_STATUSES,
 } from './approval.types';
 import {
+  ApprovalListFilter,
   ApprovalRepository,
   DecisionCommit,
+  ReassignCommit,
   SubmitCommit,
   TransferCommit,
   TransferResult,
@@ -39,8 +41,21 @@ export class InMemoryApprovalRepository implements ApprovalRepository {
     this.approvals.set(stored.id, stored);
     this.activeByLead.set(stored.leadId, stored.id);
     this.submissionKeys.set(stored.submissionIdempotencyKey, stored.id);
-    this.historyByApproval.set(stored.id, [commit.history]);
+    const events = [commit.history, ...(commit.extraHistory ?? [])];
+    this.historyByApproval.set(stored.id, events.map((item) => ({ ...item })));
     return this.cloneApproval(stored);
+  }
+
+  async commitReassign(commit: ReassignCommit): Promise<ApprovalRequest> {
+    const current = this.requireApproval(commit.approvalId);
+    this.assertVersion(current, commit.expectedVersion);
+    const updated = this.cloneApproval({
+      ...commit.approval,
+      version: current.version + 1,
+    });
+    this.approvals.set(updated.id, updated);
+    this.storeHistory(commit.approvalId, commit.history);
+    return this.cloneApproval(updated);
   }
 
   async commitDecision(commit: DecisionCommit): Promise<ApprovalRequest> {
@@ -127,8 +142,18 @@ export class InMemoryApprovalRepository implements ApprovalRepository {
     return this.findDecisionByApprovalId(approvalId);
   }
 
-  async listApprovals(): Promise<ApprovalRequest[]> {
-    return [...this.approvals.values()].map((item) => this.cloneApproval(item));
+  async listApprovals(filter?: ApprovalListFilter): Promise<ApprovalRequest[]> {
+    return [...this.approvals.values()]
+      .filter((item) => {
+        if (filter?.status && item.status !== filter.status) return false;
+        if (filter?.leadId && item.leadId !== filter.leadId) return false;
+        if (filter?.creatorId && item.creatorId !== filter.creatorId) return false;
+        if (filter?.currentApproverId && item.currentApproverId !== filter.currentApproverId) {
+          return false;
+        }
+        return true;
+      })
+      .map((item) => this.cloneApproval(item));
   }
 
   async listDecisions(): Promise<Decision[]> {

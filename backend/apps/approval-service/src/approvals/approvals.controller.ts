@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -16,7 +17,10 @@ import {
 } from './approval.types';
 import {
   parseApproveApprovalInput,
+  parseListApprovalsQuery,
+  parseReassignApprovalInput,
   parseRejectApprovalInput,
+  parseSubmitApprovalInput,
 } from '../dto/approval.dto';
 import { Actor } from '../mock/actor.decorator';
 import { ActorContextRequest, MockActor } from '../mock/actor.types';
@@ -29,9 +33,29 @@ import { notImplementedError } from '../shared/errors';
 export class ApprovalsController {
   constructor(private readonly lifecycle: ApprovalLifecycleService) {}
 
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  submit(@Body() body: unknown, @Actor() actor: MockActor) {
+    const input = parseSubmitApprovalInput(body);
+    if (input.creatorId !== actor.actorId && actor.role !== 'ADMIN') {
+      input.creatorId = actor.actorId;
+    }
+    return this.lifecycle.submit(input);
+  }
+
   @Get()
-  list(@Actor() actor: MockActor): Promise<ApprovalRequest[]> {
-    return this.lifecycle.listApprovals(actor);
+  list(
+    @Actor() actor: MockActor,
+    @Query() query: Record<string, string | undefined>,
+  ): Promise<ApprovalRequest[]> {
+    const parsed = parseListApprovalsQuery(query);
+    const filter = {
+      ...(parsed.status ? { status: parsed.status as ApprovalRequest['status'] } : {}),
+      ...(parsed.leadId ? { leadId: parsed.leadId } : {}),
+      ...(parsed.requesterId ? { creatorId: parsed.requesterId } : {}),
+      ...(parsed.approverId ? { currentApproverId: parsed.approverId } : {}),
+    };
+    return this.lifecycle.listApprovals(actor, filter);
   }
 
   @Get('pending')
@@ -65,6 +89,22 @@ export class ApprovalsController {
       actor,
       parseApproveApprovalInput(body),
       this.key(request, id, 'APPROVED'),
+    );
+  }
+
+  @Post(':id/reassign')
+  @HttpCode(HttpStatus.OK)
+  reassign(
+    @Param('id') id: string,
+    @Actor() actor: MockActor,
+    @Body() body: unknown,
+    @Req() request: ActorContextRequest,
+  ) {
+    return this.lifecycle.reassign(
+      id,
+      actor,
+      parseReassignApprovalInput(body),
+      this.key(request, id, 'REASSIGNED'),
     );
   }
 

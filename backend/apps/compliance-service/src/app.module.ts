@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { readFileSync } from 'fs';
-import { resolveSslCaPath, validateDatabaseEnv } from '../../../libs/service-config/src';
+import {
+  buildMysqlSslFromEnv,
+  validateDatabaseEnv,
+} from '../../../libs/service-config/src';
 
 import { AssessmentsModule } from './assessments/assessments.module';
 import { EvidenceModule } from './evidence/evidence.module';
@@ -36,10 +38,7 @@ import {
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const backendRoot = resolveComplianceBackendRoot();
-        const sslCaPath = resolveSslCaPath(
-          backendRoot,
-          config.getOrThrow<string>('DB_SSL_CA'),
-        );
+        const ssl = buildMysqlSslFromEnv(backendRoot, process.env);
 
         return {
           type: 'mysql' as const,
@@ -52,10 +51,7 @@ import {
           autoLoadEntities: true,
           synchronize: false,
 
-          ssl: {
-            ca: readFileSync(sslCaPath),
-            rejectUnauthorized: true,
-          },
+          ...(ssl ? { ssl } : {}),
         };
       },
     }),

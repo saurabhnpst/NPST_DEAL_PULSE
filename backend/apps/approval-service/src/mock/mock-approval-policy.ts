@@ -15,6 +15,13 @@ export class MockApprovalPolicy implements ApprovalPolicy {
   }
 
   canDecide(actor: MockActor, approval: ApprovalRequest): boolean {
+    if (approval.currentAuthorityRole === 'ASSIGNED') {
+      return (
+        actor.actorId === approval.currentApproverId &&
+        this.hasScope(actor, approval) &&
+        this.hasResourceGrants(actor, approval)
+      );
+    }
     if (actor.role !== 'PNL_HEAD' && actor.role !== 'SALES_MANAGER') {
       return false;
     }
@@ -22,6 +29,17 @@ export class MockApprovalPolicy implements ApprovalPolicy {
       actor.actorId === approval.currentApproverId &&
       this.hasScope(actor, approval) &&
       this.hasResourceGrants(actor, approval)
+    );
+  }
+
+  canReassign(actor: MockActor, approval: ApprovalRequest): boolean {
+    if (!this.hasScope(actor, approval) || !this.hasResourceGrants(actor, approval)) {
+      return false;
+    }
+    return (
+      actor.role === 'ADMIN' ||
+      actor.actorId === approval.creatorId ||
+      actor.actorId === approval.currentApproverId
     );
   }
 

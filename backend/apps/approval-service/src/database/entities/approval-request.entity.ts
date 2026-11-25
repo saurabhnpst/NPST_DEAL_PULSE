@@ -5,7 +5,11 @@ import {
   ApprovalStatus,
 } from '../../approvals/approval.types';
 
-const APPROVAL_AUTHORITY_ROLES: readonly ApprovalAuthorityRole[] = ['PNL_HEAD', 'SALES_MANAGER'];
+const APPROVAL_AUTHORITY_ROLES: readonly ApprovalAuthorityRole[] = [
+  'ASSIGNED',
+  'PNL_HEAD',
+  'SALES_MANAGER',
+];
 
 @Entity({ name: 'approval_requests' })
 @Index('uq_approval_submission_key', ['submissionIdempotencyKey'], { unique: true })
@@ -86,7 +90,7 @@ export class ApprovalRequestEntity {
     length: 64,
     generatedType: 'STORED',
     asExpression:
-      "case when status in ('PENDING_PNL_HEAD','PENDING_SALES_MANAGER') then lead_id else null end",
+      "case when status in ('PENDING','PENDING_PNL_HEAD','PENDING_SALES_MANAGER') then lead_id else null end",
     insert: false,
     update: false,
     nullable: true,
