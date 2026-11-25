@@ -27,6 +27,11 @@ export class LocalIdentityService {
     return user;
   }
 
+  /** Unique users (map holds each user under username and email). */
+  listUsers(): LocalAuthUser[] {
+    return [...new Set(this.usersByKey.values())];
+  }
+
   findByUsername(userId: string): LocalAuthUser | undefined {
     return this.usersByKey.get(userId.toLowerCase());
   }

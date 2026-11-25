@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore, dealValue, inr, category, fmtDate, stamp } from '../store/Store.jsx';
-import { opportunityService } from '../services/opportunityService.js';
-import { apiOpportunityToUi } from '../mappers/opportunityMapper.js';
+import { createEvaluation, updateEvaluation, recommend, decide } from '../services/workflowService.js';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { opportunityService, loadOpportunity, saveOpportunityPatch, uploadDocument, documentDownloadUrl } from '../services/opportunityService.js';
 import { LoadingPanel, ErrorPanel } from '../components/AsyncState.jsx';
 import {
   stageMeta, OPEN_STAGES, PRODUCTS, PRODUCTS_2_4, MODULES, OPP_TYPES, TERRITORIES, LOST_REASONS, LEAD_SOURCES, OVERRIDE_REASONS, HOLD_REASONS, plusDays,
@@ -12,7 +13,7 @@ import {
 } from '../data/defaults.js';
 import { MERCHANT_CATEGORIES } from '../data/merchantCategories.js';
 import { useTeams, TeamsBadge } from '../components/Teams.jsx';
-import { ownerOptions, PRESALES_OPTIONS } from '../data/peopleOptions.js';
+import { ownerOptions, OWNER_OPTIONS, PRESALES_OPTIONS } from '../data/peopleOptions.js';
 import { Badge, ReadOnlyNote, Stepper, Tabs, Timeline, Toast, Modal, MultiPick } from '../components/ui.jsx';
 
 const EARLY_STAGES = ['Qualification', 'Needs Analysis', 'Impact Analysis', 'Proposal'];
@@ -46,7 +47,7 @@ const tcv = (v) => amountFirstYear(v) + num(v.year2) + num(v.year3) + num(v.year
 // Sections and fields follow "Opportunity Information.docx" / "Opportunity Fields.xlsx".
 const GROUPS = [
   { name: 'Opportunity information', always: true, fields: [
-    T('name', 'Opportunity Name', { req: 1, note: 'Defaults to Company_Product on conversion' }), S('owner', 'Opportunity Owner', ['—'], { req: 1 }),
+    T('name', 'Opportunity Name', { req: 1, note: 'Defaults to Company_Product on conversion' }), S('owner', 'Opportunity Owner', OWNER_OPTIONS, { req: 1 }),
     T('account', 'Account Name', { req: 1 }), R('_recordType', 'Opportunity Record Type'),
     R('_forecast', 'Forecast Category', { note: 'Set by stage' }), R('_stage', 'Stage', { note: 'Moved with “Save & proceed”' }),
     S('leadSource', 'Lead Source', LEAD_SOURCES, { note: 'Carried from the lead' }), D('closeDate', 'Close Date', { req: 1 }),
@@ -131,29 +132,31 @@ const missingFor = (stageIdx, v) => GROUPS.filter((g) => g.stage === stageIdx ||
 
 export default function Opportunity() {
   const { id } = useParams();
-  const { user, can, readOnly } = useAuth();
+  const { user, can, readOnly, userName, userIdByName } = useAuth();
   const { state, dispatch } = useStore();
   const nav = useNavigate();
   const raw = state.opportunities.find((o) => o.id === id || o._apiId === id);
+  const [loaded, setLoaded] = useState(false); // full record (commercials, history, documents) loaded
   const [oppFetch, setOppFetch] = useState({ loading: false, error: null });
 
+  const refresh = async () => {
+    const ui = await loadOpportunity(id, userName);
+    dispatch({ type: 'UPSERT_OPP', opp: ui });
+    return ui;
+  };
   useEffect(() => {
-    if (raw || !id) return;
     let cancelled = false;
     (async () => {
       setOppFetch({ loading: true, error: null });
       try {
-        const row = await opportunityService.get(id);
-        if (cancelled) return;
-        const ui = apiOpportunityToUi(row);
-        dispatch({ type: 'SET_OPPORTUNITIES', opportunities: [...state.opportunities, ui] });
-        setOppFetch({ loading: false, error: null });
+        await refresh();
+        if (!cancelled) { setOppFetch({ loading: false, error: null }); setLoaded(true); }
       } catch (e) {
         if (!cancelled) setOppFetch({ loading: false, error: e });
       }
     })();
     return () => { cancelled = true; };
-  }, [id, raw, dispatch, state.opportunities]);
+  }, [id, userName]); // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState('Details');
   const [form, setForm] = useState(null); // non-null while editing Details
   const [toast, setToast] = useState('');
@@ -162,9 +165,9 @@ export default function Opportunity() {
   const topRef = useRef(null);
 
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3200); return () => clearTimeout(t); }, [toast]);
-  if (oppFetch.loading) return <LoadingPanel label="Loading opportunity…" />;
-  if (oppFetch.error) {
-    return <ErrorPanel title="Opportunity unavailable" message={oppFetch.error.message} onRetry={() => setOppFetch({ loading: false, error: null })} />;
+  if (oppFetch.loading && !raw) return <LoadingPanel label="Loading opportunity…" />;
+  if (oppFetch.error && !raw) {
+    return <ErrorPanel title="Opportunity unavailable" message={oppFetch.error.message} onRetry={() => refresh().then(() => setOppFetch({ loading: false, error: null })).catch((e) => setOppFetch({ loading: false, error: e }))} />;
   }
   if (!raw) return <div className="panel empty"><h1 className="h1">Opportunity not found</h1><p className="muted s14">No opportunity with this ID in the API.</p><Link to="/opportunities">Back to opportunities</Link></div>;
 
@@ -194,18 +197,35 @@ export default function Opportunity() {
   const missing = idx >= 0 ? missingFor(idx, v) : [];
   const openStageTasks = stageTasksFor(opp).filter((t) => !t.done);
   const needsOverride = opp.tasks.some((t) => EARLY_STAGES.includes(t.stage || opp.stage) && !t.done);
-  const patch = (p, note) => dispatch({ type: note ? 'UPDATE_OPP' : 'PATCH_OPP', id, patch: p, note, who: user.name });
   const say = setToast;
+  const apiId = opp._apiId || opp.id;
+  /** Run an API change, reload the opportunity, then show `msg` (or the error). Returns true on success. */
+  const act = async (fn, msg) => {
+    try {
+      await fn(apiId);
+      await refresh();
+      if (msg) say(msg);
+      return true;
+    } catch (e) {
+      say(e?.message || 'Save failed');
+      return false;
+    }
+  };
+  // v14 pages call patch(changes, note); it now saves through the API
+  const patch = (p, note) => act(() => saveOpportunityPatch(opp, p, note, userIdByName));
 
   const startEdit = () => { setTab('Details'); setForm({ ...opp }); topRef.current?.scrollIntoView({ behavior: 'smooth' }); };
-  const save = () => { const { history, ...rest } = form; patch(rest, 'Details edited'); setForm(null); say('Saved · change recorded in History'); };
+  const changed = (f) => Object.fromEntries(Object.entries(f).filter(([k, val]) => JSON.stringify(val) !== JSON.stringify(opp[k])));
+  const save = async () => { if (await patch(changed(form), 'Details edited')) { setForm(null); say('Saved · change recorded in History'); } };
   const advance = () => {
     if (missing.length) { setTab('Details'); return say('Fill these first: ' + missing.join(', ')); }
     if (openStageTasks.length) { setTab('Details'); return say('Complete these tasks first: ' + openStageTasks.map((t) => t.t).join(', ')); }
-    if (editing) { const { history, ...rest } = form; patch(rest, 'Details saved'); setForm(null); }
     const next = OPEN_STAGES[idx + 1];
-    dispatch({ type: 'MOVE_STAGE', id, stage: next, who: user.name });
-    say(`Moved to ${next} · probability ${stageMeta(next).prob}%`);
+    act(async (key) => {
+      if (editing) await saveOpportunityPatch(opp, changed(form), 'Details saved', userIdByName);
+      await opportunityService.proceed(key, opp.stage);
+      setForm(null);
+    }, `Moved to ${next} · probability ${stageMeta(next).prob}%`);
   };
   const goToStage = (i) => {
     setTab('Details');
@@ -228,15 +248,17 @@ export default function Opportunity() {
       : (closing.to !== 'Closed Lost' || closing.reason) && (closing.to !== 'Closed Won' || (closing.poDate && Number(closing.poValue) > 0))
         && (!needsOverride || (closing.overrideReason && closing.overrideJustification.trim()))
   );
-  const close = () => {
-    const extra = isHold(closing)
-      ? { holdReason: closing.holdReason, holdDetails: closing.holdDetails.trim(), holdUntil: closing.holdUntil, holdFrom: opp.stage, holdAt: stamp() }
-      : { closeDate: plusDays(0),
-        ...(closing.to === 'Closed Lost' ? { lostReason: closing.reason, lostReasonRemark: closing.remark.trim() } : {}),
-        ...(closing.to === 'Closed Won' ? { poDate: closing.poDate, poValue: Number(closing.poValue), poReceived: 'Yes', closedValue: Number(closing.poValue), projectStartActual: closing.projectStartActual, firstBillingDate: closing.firstBillingDate, firstBillingValue: closing.firstBillingValue === '' ? '' : Number(closing.firstBillingValue) } : {}) };
-    dispatch({ type: 'MOVE_STAGE', id, stage: closing.to, who: user.name, extra: { ...extra, ...overridePart(closing) } });
-    setClosing(null); setForm(null);
-    say(isHold(closing) ? 'Opportunity put on hold · reason recorded' : 'Deal marked ' + closing.to + (needsOverride ? ' · early-close override logged' : ''));
+  const close = async () => {
+    const c = closing;
+    const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, val]) => val !== '' && val != null));
+    const override = needsOverride && !isHold(c) ? { overrideReason: c.overrideReason, overrideJustification: c.overrideJustification.trim() } : {};
+    const ok = await act((key) => {
+      if (isHold(c)) return opportunityService.hold(key, clean({ holdReason: c.holdReason, holdDetails: c.holdDetails.trim(), holdUntil: c.holdUntil }));
+      if (c.to === 'Closed Lost') return opportunityService.closeLost(key, clean({ lostReason: c.reason, lostReasonRemark: c.remark.trim(), ...override }));
+      if (c.to === 'Closed Won') return opportunityService.closeWon(key, clean({ poDate: c.poDate, poValue: Number(c.poValue), projectStartActual: c.projectStartActual, firstBillingDate: c.firstBillingDate, firstBillingValue: c.firstBillingValue === '' ? '' : Number(c.firstBillingValue), ...override }));
+      return opportunityService.closeNoBid(key, clean(override));
+    }, isHold(c) ? 'Opportunity put on hold · reason recorded' : 'Deal marked ' + c.to + (needsOverride ? ' · early-close override logged' : ''));
+    if (ok) { setClosing(null); setForm(null); }
   };
 
   return (
@@ -275,7 +297,7 @@ export default function Opportunity() {
             ? <p className="warn">This opportunity is <b>On Hold</b>{opp.holdReason ? <> · hold reason: <b>{opp.holdReason}</b></> : ''}{opp.holdDetails ? ` — ${opp.holdDetails}` : ''}{opp.holdFrom ? ` · held at ${opp.holdFrom}` : ''}{opp.holdUntil ? ` · review by ${fmtDate(opp.holdUntil)}` : ''}.</p>
             : <p className={opp.stage === 'Closed Won' ? 'ok' : 'warn'}>This opportunity is <b>{opp.stage}</b>{opp.lostReason ? ` · ${opp.lostReason}` : ''}{opp.lostReasonRemark ? ` — ${opp.lostReasonRemark}` : ''}{opp.poValue && opp.stage === 'Closed Won' ? ` · PO ${inr(opp.poValue)}${opp.poDate ? ' on ' + fmtDate(opp.poDate) : ''}` : opp.closedValue ? ` · closed ${inr(opp.closedValue)}` : ''}.</p>}
       </div>
-      {opp.stage === 'On Hold' && <FallbackPanel opp={opp} canAct={!!can.fallback} say={say} />}
+      {opp.stage === 'On Hold' && <FallbackPanel opp={opp} canAct={!!can.fallback} act={act} />}
 
       {closing && (
         <Modal title={isHold(closing) ? 'Put on hold' : 'Close deal'} onClose={() => setClosing(null)} footer={<>
@@ -327,9 +349,9 @@ export default function Opportunity() {
           {tab === 'Pre-PO evaluation' && <PrePoTab opp={opp} canEdit={canEdit || presalesCan} say={say} />}
           {tab === 'RFP & compliance' && <RfpTab opp={opp} />}
           {tab === 'Proposal & decision' && <DecisionTab opp={opp} canEdit={canEdit} patch={patch} say={say} />}
-          {tab === 'Commercials & PO' && <CommercialsTab opp={opp} canEdit={canEdit} patch={patch} say={say} />}
-          {tab === 'Documents' && <DocumentsTab opp={opp} canEdit={canEdit || presalesCan} patch={patch} say={say} />}
-          {tab === 'History' && <HistoryTab opp={opp} canEdit={canEdit} patch={patch} />}
+          {tab === 'Commercials & PO' && <CommercialsTab opp={opp} canEdit={canEdit} patch={patch} say={say} act={act} />}
+          {tab === 'Documents' && <DocumentsTab opp={opp} canEdit={canEdit || presalesCan} act={act} loaded={loaded} />}
+          {tab === 'History' && <HistoryTab opp={opp} canEdit={canEdit} act={act} />}
         </div>
         <SidePanels opp={opp} canEdit={canEdit} patch={patch} nav={nav} />
       </div>
@@ -482,20 +504,16 @@ function StageActions({ g, idx, editing, save, startEdit, advance, missing }) {
 }
 
 // ---------------- On hold · fallback & reopen ----------------
-function FallbackPanel({ opp, canAct, say }) {
-  const { user } = useAuth();
-  const { dispatch } = useStore();
+function FallbackPanel({ opp, canAct, act }) {
   const blank = { plan: '', suggestion: '', comment: '', stage: opp.holdFrom && OPEN_STAGES.includes(opp.holdFrom) ? opp.holdFrom : OPEN_STAGES[0] };
   const [f, setF] = useState(null);
   const list = opp.fallbacks || [];
-  const entry = (kind) => ({ kind, by: user.name, at: stamp(), plan: f.plan.trim(), suggestion: f.suggestion.trim(), comment: f.comment.trim(), stage: kind === 'Reopened' ? f.stage : undefined });
-  const saveOnly = () => {
-    dispatch({ type: 'UPDATE_OPP', id: opp.id, patch: { fallbacks: [entry('Fallback'), ...list] }, note: `Fallback defined: ${f.plan.trim()}`, who: user.name });
-    setF(null); say('Fallback plan saved');
+  const body = () => ({ plan: f.plan.trim(), comment: f.comment.trim(), ...(f.suggestion.trim() ? { suggestion: f.suggestion.trim() } : {}) });
+  const saveOnly = async () => {
+    if (await act((key) => opportunityService.fallback(key, body()), 'Fallback plan saved')) setF(null);
   };
-  const reopen = () => {
-    dispatch({ type: 'MOVE_STAGE', id: opp.id, stage: f.stage, who: user.name, extra: { fallbacks: [entry('Reopened'), ...list], reopenedAt: stamp(), holdUntil: '' } });
-    setF(null); say(`Opportunity reopened at ${f.stage}`);
+  const reopen = async () => {
+    if (await act((key) => opportunityService.reopen(key, { ...body(), stage: f.stage }), `Opportunity reopened at ${f.stage}`)) setF(null);
   };
   return (
     <section className="panel col gap12 hold-panel" aria-label="Fallback and reopen">
@@ -544,7 +562,9 @@ const evalStep = (s) => (['Accepted', 'Changes Requested', 'Rejected'].includes(
 
 function PrePoTab({ opp, canEdit, say }) {
   const { user } = useAuth();
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
+  const { reloadWorkflow } = useBusinessData();
+  const save = async (fn, msg) => { try { const r = await fn(); await reloadWorkflow(); say(msg); return r; } catch (e) { say(e?.message || 'Save failed'); return null; } };
   const evals = state.evaluations.filter((e) => e.oppId === opp.id);
   const [selId, setSelId] = useState(evals[0]?.id);
   const sel = evals.find((e) => e.id === selId) || evals[0];
@@ -554,18 +574,19 @@ function PrePoTab({ opp, canEdit, say }) {
   useEffect(() => { setEv(sel); }, [sel?.id]); // eslint-disable-line
   const f = (k) => (e) => setEv({ ...ev, [k]: e.target.value });
 
-  const newEval = () => {
-    const id = `EVAL-${new Date().getFullYear()}-${String(state.seq.eval + 1).padStart(3, '0')}`;
-    dispatch({ type: 'ADD_EVAL', ev: { name: `${opp.productTsp} PoC`, oppId: opp.id, type: 'PoC', sales: opp.owner, solution: opp.presales !== '—' ? opp.presales : user.name, tech: '—', approval: 'Pending',
-      start: plusDays(7), target: plusDays(37), submitted: '', status: 'Not Started', next: 'Approval by Pre-Sales Mgr', effort: 0, cost: 0, expectedPo: fmtDate(opp.closeDate), scope: '', deliverables: [] }, who: user.name });
+  const newEval = async () => {
+    const created = await save(() => createEvaluation({ name: `${opp.productTsp} PoC`, oppId: opp.id, type: 'PoC', sales: opp.owner, solution: opp.presales !== '—' ? opp.presales : user.name, tech: '—', approval: 'Pending',
+      start: plusDays(7), target: plusDays(37), submitted: '', status: 'Not Started', next: 'Approval by Pre-Sales Mgr', effort: 0, cost: 0, expectedPo: fmtDate(opp.closeDate), scope: '', deliverables: [] }), 'New evaluation created · Solution and Tech owners notified on Teams');
+    if (!created) return;
+    const id = created.id;
     const sol = opp.presales !== '—' ? opp.presales : user.name;
     teams(sol, `New PoC evaluation ${id} created for ${opp.name} (${opp.account}). You are the Solution owner — please review and approve.`, { kind: 'PoC', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
     teams(user.name, `You are the Tech owner on PoC ${id} for ${opp.name} (${opp.account}).`, { kind: 'PoC', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
-    setSelId(id); say('New evaluation created · Solution and Tech owners notified on Teams');
+    setSelId(id);
   };
-  const saveEval = () => { dispatch({ type: 'UPDATE_EVAL', id: ev.id, patch: { ...ev, effort: Number(ev.effort) || 0, cost: Number(String(ev.cost).replace(/,/g, '')) || 0 } }); say('Saved · change recorded in History'); };
-  const dls = sel ? (sel.deliverables || (sel.oppId === opp.id ? opp.deliverables : [])) : [];
-  const setDls = (list) => (sel.deliverables ? dispatch({ type: 'UPDATE_EVAL', id: sel.id, patch: { deliverables: list } }) : dispatch({ type: 'PATCH_OPP', id: opp.id, patch: { deliverables: list } }));
+  const saveEval = () => save(() => updateEvaluation(ev.id, { ...ev, effort: Number(ev.effort) || 0, cost: Number(String(ev.cost).replace(/,/g, '')) || 0 }), 'Saved');
+  const dls = sel?.deliverables || [];
+  const setDls = (list) => save(() => updateEvaluation(sel.id, { deliverables: list }), 'Deliverables saved');
 
   if (!sel) return (
     <section className="panel empty">
@@ -690,9 +711,12 @@ function RfpTab({ opp }) {
 // ---------------- Proposal & decision ----------------
 function DecisionTab({ opp, canEdit, patch, say }) {
   const { user, can } = useAuth();
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
+  const { reloadWorkflow } = useBusinessData();
+  const run = async (fn, msg) => { try { await fn(); await reloadWorkflow(); say(msg); } catch (e) { say(e?.message || 'Save failed'); } };
   const dec = state.decisions.find((d) => d.oppId === opp.id);
-  const [rec, setRec] = useState(opp.recDraft);
+  // form starts from the open recommendation (if any), else blank
+  const [rec, setRec] = useState(() => (dec && !dec.done ? { rec: dec.rec, syn: dec.syn, concern: dec.concern } : { rec: 'Yes', syn: '', concern: '' }));
   const [form, setForm] = useState(null); // {mode:'upload'|'assign', ...}
   const teams = useTeams();
   const [decNote, setDecNote] = useState('');
@@ -710,7 +734,6 @@ function DecisionTab({ opp, canEdit, patch, say }) {
       const ex = opp.reviews.find((r) => r.t === form.doc);
       const row = { id: ex?.id || uid(), t: form.doc, v: ex?.v || 'v1', r: form.reviewer, due: short(form.due), s: 'Assigned', teamsAt: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }) };
       patch({ reviews: ex ? opp.reviews.map((r) => (r.id === ex.id ? row : r)) : [...opp.reviews, row] }, `Assigned ${form.doc} to ${form.reviewer}`);
-      dispatch({ type: 'ADD_REVIEW', review: { id: 'R' + uid(), opp: `${opp.name} · ${opp.account}`, type: form.reviewer.split(' · ')[0] === 'Finance' ? 'Finance' : 'Legal / Compliance', doc: form.doc.replace(/\s+/g, '_') + '_' + row.v, ver: row.v, due: short(form.due), status: 'Assigned' } });
       teams(form.reviewer, `Please review “${form.doc}” for ${opp.name} (${opp.account}) — due ${short(form.due)}.`, { kind: 'Review', ctx: `${opp.name} · ${opp.account}`, link: '/opportunities/' + opp.id });
       say(`Review assigned to ${form.reviewer} · Teams message sent`);
     }
@@ -760,10 +783,9 @@ function DecisionTab({ opp, canEdit, patch, say }) {
             <label className="fl">Improvement points / concerns<textarea className="in ta" rows={2} value={rec.concern} onChange={(e) => setRec({ ...rec, concern: e.target.value })} /></label>
             <div className="row gap10 wrap">
               <button className="btn-p" disabled={!rec.syn || (rec.rec === 'No' && !rec.reason)} onClick={() => {
-                dispatch({ type: 'RECOMMEND', oppId: opp.id, rec: rec.rec, syn: rec.syn, concern: rec.rec === 'No' ? 'Reason for No: ' + rec.reason + (rec.concern ? ' · ' + rec.concern : '') : rec.concern, who: user.name });
-                patch({ recDraft: rec }); say('Sent to P&L Head');
+                run(() => recommend(opp.id, rec.rec, rec.syn, rec.rec === 'No' ? 'Reason for No: ' + rec.reason + (rec.concern ? ' · ' + rec.concern : '') : rec.concern), 'Sent to P&L Head');
               }}>Send to P&amp;L Head</button>
-              {dec && !dec.done && <span role="status" className="s13" style={{ color: '#168A70' }}>Sent {dec.recBy.split(' · ').slice(1).join(' · ')} to Pushkar B. (P&amp;L Head)</span>}
+              {dec && !dec.done && <span role="status" className="s13" style={{ color: '#168A70' }}>Sent {dec.recBy.split(' · ').slice(1).join(' · ')} to the P&amp;L Head</span>}
             </div>
           </>
         ) : <p className="s14" style={{ margin: 0 }}>{dec ? <>Sales recommends <b>{dec.rec}</b> · {dec.recBy}<br /><span className="muted">{dec.syn}</span></> : <span className="muted">No recommendation yet.</span>}</p>}
@@ -772,7 +794,7 @@ function DecisionTab({ opp, canEdit, patch, say }) {
       <section className="panel col gap10">
         <div className="row between wrap gap8">
           <div><h2 className="h2">Step 2 · P&amp;L Head decision</h2>
-            <p className="muted s13" style={{ margin: '4px 0 0' }}>{!dec ? 'Nothing sent yet.' : dec.done ? `${dec.done.v} by ${dec.done.by} · ${dec.done.at}` : 'Waiting for Pushkar B. to choose Proceed or Reject'}</p>
+            <p className="muted s13" style={{ margin: '4px 0 0' }}>{!dec ? 'Nothing sent yet.' : dec.done ? `${dec.done.v} by ${dec.done.by} · ${dec.done.at}` : 'Waiting for the P&L Head to choose Proceed or Reject'}</p>
           </div>
           <Link className="btn" to="/decisions">Open P&amp;L decisions</Link>
         </div>
@@ -782,8 +804,8 @@ function DecisionTab({ opp, canEdit, patch, say }) {
             <div className="s13 w600">You are the P&amp;L Head</div>
             <textarea className="in ta" rows={2} placeholder="Comments (reason required for Reject)" value={decNote} onChange={(e) => setDecNote(e.target.value)} />
             <div className="row gap8">
-              <button className="btn-p" onClick={() => { dispatch({ type: 'DECIDE', id: dec.id, v: 'Proceed', note: decNote, who: user.name }); patch({}, 'P&L Head: Proceed'); say('Decision recorded: Proceed'); }}>Proceed</button>
-              <button className="btn-d" disabled={!decNote} onClick={() => { dispatch({ type: 'DECIDE', id: dec.id, v: 'Reject', note: decNote, who: user.name }); patch({}, 'P&L Head: Reject'); say('Decision recorded: Reject'); }}>Reject</button>
+              <button className="btn-p" onClick={() => run(() => decide(dec.id, 'Proceed', decNote), 'Decision recorded: Proceed')}>Proceed</button>
+              <button className="btn-d" disabled={!decNote} onClick={() => run(() => decide(dec.id, 'Reject', decNote), 'Decision recorded: Reject')}>Reject</button>
             </div>
           </div>
         )}
@@ -794,11 +816,12 @@ function DecisionTab({ opp, canEdit, patch, say }) {
 }
 
 // ---------------- Commercials & PO ----------------
-function CommercialsTab({ opp, canEdit, patch, say }) {
+function CommercialsTab({ opp, canEdit, patch, say, act }) {
   const { user } = useAuth();
   const [lines, setLines] = useState(opp.lines);
   const [terms, setTerms] = useState({ licence: opp.licence, milestones: opp.milestones, amcTerm: opp.amcTerm });
   const [po, setPo] = useState({ poNumber: opp.poNumber || '', poDate: opp.poDate || '', poValue: opp.poValue ?? '' });
+  const [poFile, setPoFile] = useState(null); // PO file is linked to the opportunity in document-service
   const [newLine, setNewLine] = useState(null);
   useEffect(() => { setLines(opp.lines); }, [opp.lines]);
   const last = opp.versions.length - 1;
@@ -869,11 +892,11 @@ function CommercialsTab({ opp, canEdit, patch, say }) {
           <label className="fl">PO date *<input className="in" type="date" readOnly={!canEdit} value={po.poDate} onChange={(e) => setPo({ ...po, poDate: e.target.value })} /></label>
           <label className="fl">PO value (₹)<input className="in" type="number" readOnly={!canEdit} placeholder={String(tot(last))} value={po.poValue} onChange={(e) => setPo({ ...po, poValue: e.target.value === '' ? '' : Number(e.target.value) })} /></label>
         </div>
-        {opp.poFile && <div className="s13">Attached: <b>{opp.poFile}</b></div>}
+        {(poFile || opp.files.find((f) => f.t === 'PO')) && <div className="s13">Attached: <b>{(poFile || opp.files.find((f) => f.t === 'PO')).n}</b></div>}
         {canEdit && <div className="row gap8">
-          <input ref={fileRef} type="file" hidden onChange={(e) => { const n = e.target.files?.[0]?.name; if (n) { patch({ poFile: n, files: [{ id: uid(), n, t: 'PO', v: 'v1', u: user.name + ' · ' + short(plusDays(0)) }, ...opp.files] }, 'PO attached: ' + n); say('PO attached'); } }} />
+          <input ref={fileRef} type="file" hidden onChange={(e) => { const file = e.target.files?.[0]; if (file) act(async (key) => { const docId = await uploadDocument(file, 'OPPORTUNITY', opp.id, 'PO'); await opportunityService.activity(key, { activityKind: 'System', summary: 'PO attached: ' + file.name }); setPoFile({ id: docId, n: file.name }); }, 'PO attached'); e.target.value = ''; }} />
           <button className="btn" onClick={() => fileRef.current?.click()}>Attach PO</button>
-          <button className="btn-p" disabled={!po.poNumber || !po.poDate} onClick={() => { patch({ ...po, poValue: po.poValue === '' ? tot(last) : po.poValue }, `PO receipt saved: ${po.poNumber}`); say('PO receipt saved'); }}>Save PO receipt</button>
+          <button className="btn-p" disabled={!po.poNumber || !po.poDate} onClick={() => act((key) => opportunityService.poReceipt(key, { poNumber: po.poNumber, poDate: po.poDate, poValue: po.poValue === '' ? tot(last) : Number(po.poValue) }), 'PO receipt saved')}>Save PO receipt</button>
         </div>}
       </section>
     </>
@@ -881,8 +904,7 @@ function CommercialsTab({ opp, canEdit, patch, say }) {
 }
 
 // ---------------- Documents ----------------
-function DocumentsTab({ opp, canEdit, patch, say }) {
-  const { user } = useAuth();
+function DocumentsTab({ opp, canEdit, act, loaded }) {
   const [type, setType] = useState('Proposal');
   const ref = useRef(null);
   return (
@@ -892,10 +914,9 @@ function DocumentsTab({ opp, canEdit, patch, say }) {
         {canEdit && <div className="row gap8">
           <select className="in sm" aria-label="Document type" value={type} onChange={(e) => setType(e.target.value)}>{['RFP', 'RFP corrigendum', 'Compliance', 'Pre-PO deliverable', 'Proposal', 'Contract', 'PO', 'Other'].map((t) => <option key={t}>{t}</option>)}</select>
           <input ref={ref} type="file" hidden onChange={(e) => {
-            const n = e.target.files?.[0]?.name; if (!n) return;
-            const ex = opp.files.filter((f) => f.n === n).length;
-            patch({ files: [{ id: uid(), n, t: type, v: 'v' + (ex + 1), u: user.name + ' · ' + short(plusDays(0)) }, ...opp.files] }, `Uploaded ${n}`);
-            say('Uploaded ' + n); e.target.value = '';
+            const file = e.target.files?.[0]; if (!file) return;
+            act(() => uploadDocument(file, 'OPPORTUNITY', opp.id, type), 'Uploaded ' + file.name);
+            e.target.value = '';
           }} />
           <button className="btn-p" onClick={() => ref.current?.click()}>+ Upload</button>
         </div>}
@@ -903,8 +924,8 @@ function DocumentsTab({ opp, canEdit, patch, say }) {
       <div className="tablewrap"><table>
         <thead><tr><th>File</th><th>Type</th><th>Version</th><th>Uploaded</th></tr></thead>
         <tbody>
-          {opp.files.map((f) => <tr key={f.id}><td><span className="w500" style={{ color: '#214C98' }}>{f.n}</span></td><td>{f.t}</td><td>{f.v}</td><td className="s13 muted">{f.u}</td></tr>)}
-          {opp.files.length === 0 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 24 }}>No documents yet.</td></tr>}
+          {opp.files.map((f) => <tr key={f.id}><td><a className="w500" style={{ color: '#214C98' }} href={documentDownloadUrl(f.id)} target="_blank" rel="noreferrer">{f.n}</a></td><td>{f.t}</td><td>{f.v}</td><td className="s13 muted">{f.u}</td></tr>)}
+          {opp.files.length === 0 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 24 }}>{loaded ? 'No documents yet.' : 'Loading…'}</td></tr>}
         </tbody>
       </table></div>
     </section>
@@ -912,7 +933,7 @@ function DocumentsTab({ opp, canEdit, patch, say }) {
 }
 
 // ---------------- History ----------------
-function HistoryTab({ opp, canEdit, patch }) {
+function HistoryTab({ opp, canEdit, act }) {
   const [log, setLog] = useState(null);
   return (
     <section className="panel col gap16">
@@ -925,7 +946,7 @@ function HistoryTab({ opp, canEdit, patch }) {
           <label className="fl">Type<select className="in" value={log.kind} onChange={(e) => setLog({ ...log, kind: e.target.value })}><option>Call</option><option>Meeting</option><option>Email</option><option>Note</option></select></label>
           <label className="fl">With<input className="in" placeholder="e.g. A. Kulkarni (bank)" value={log.with} onChange={(e) => setLog({ ...log, with: e.target.value })} /></label>
           <label className="fl" style={{ gridColumn: '1 / -1' }}>Summary *<textarea className="in ta" rows={2} value={log.note} onChange={(e) => setLog({ ...log, note: e.target.value })} /></label>
-          <div className="row gap8"><button className="btn-p" disabled={!log.note} onClick={() => { patch({}, `${log.kind}${log.with ? ' with ' + log.with : ''}: ${log.note}`); setLog(null); }}>Save</button><button className="btn" onClick={() => setLog(null)}>Cancel</button></div>
+          <div className="row gap8"><button className="btn-p" disabled={!log.note} onClick={async () => { if (await act((key) => opportunityService.activity(key, { activityKind: log.kind, summary: log.note.slice(0, 500), ...(log.with ? { withParty: log.with } : {}) }), 'Logged')) setLog(null); }}>Save</button><button className="btn" onClick={() => setLog(null)}>Cancel</button></div>
         </div>
       )}
       <Timeline items={opp.history || []} />

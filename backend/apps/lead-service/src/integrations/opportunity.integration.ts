@@ -19,6 +19,9 @@ type OpportunityCreateBody = {
   arr: number;
   oneTime?: number;
   products: Array<{ productSlot: number; productTsp: string; modules: string[] }>;
+  ownerUserId?: number;
+  recordType?: string;
+  leadSource?: string;
 };
 
 @Injectable()
@@ -50,6 +53,10 @@ export class OpportunityIntegration {
       arr: 0,
       oneTime: 0,
       products: [{ productSlot: 1, productTsp: tsp.slice(0, 64), modules: [] }],
+      // carry over owner / vertical / source from the lead (v14: "Converting a lead carries over account, product, source and owner")
+      ...(/^\d+$/.test(lead.ownerId ?? '') ? { ownerUserId: Number(lead.ownerId) } : {}),
+      ...(lead.leadRecordType ? { recordType: lead.leadRecordType.includes('PPAS') ? 'PPAS' : 'TSP' } : {}),
+      ...(lead.leadSource ? { leadSource: lead.leadSource } : {}),
     };
   }
 
@@ -106,9 +113,10 @@ export class OpportunityIntegration {
     }
     const data =
       typeof json === 'object' && json !== null && 'data' in json
-        ? (json as { data: { id?: string } }).data
-        : (json as { id?: string });
-    const opportunityId = data?.id;
+        ? (json as { data: { id?: string; publicId?: string } }).data
+        : (json as { id?: string; publicId?: string });
+    // Prefer the public id (OPP-YYYY-NNNNN) — that is what the portal shows and links to.
+    const opportunityId = data?.publicId ?? data?.id;
     if (!opportunityId) {
       throw new ServiceUnavailableException(
         'Opportunity Service did not return an opportunity id',

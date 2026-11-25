@@ -33,7 +33,7 @@ const fromLeadFields = (l) => ({
 const RFP_PATH = { presales: '—', skipPresales: false };
 
 export default function NewOpportunity({ onClose, onCreated, fromLead }) {
-  const { user } = useAuth();
+  const { user, userName, userIdByName } = useAuth();
   const { state, dispatch } = useStore();
   const { reloadOpportunities, reloadLeads } = useBusinessData() || {};
   const owners = ownerOptions(user);
@@ -67,22 +67,10 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
     setSaving(true);
     setErr('');
     try {
-      const created = await opportunityService.create(uiOpportunityToCreate(v));
-      const ui = apiOpportunityToUi(created);
+      const created = await opportunityService.create(uiOpportunityToCreate(v, userIdByName));
+      const ui = apiOpportunityToUi(created, userName);
       if (ui) {
-        dispatch({
-          type: 'SET_OPPORTUNITIES',
-          opportunities: [ui, ...state.opportunities.filter((o) => o.id !== ui.id)],
-        });
-        if (tagged?.id) {
-          dispatch({
-            type: 'UPDATE_LEAD',
-            id: tagged.id,
-            patch: { status: 'Qualified', oppId: ui.id, approval: 'approved' },
-            note: `Converted to opportunity ${ui.id}`,
-            who: user.name,
-          });
-        }
+        dispatch({ type: 'UPSERT_OPP', opp: ui });
       }
       await reloadOpportunities?.();
       await reloadLeads?.();

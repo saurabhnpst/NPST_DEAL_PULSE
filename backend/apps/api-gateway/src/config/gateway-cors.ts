@@ -15,6 +15,8 @@ const GATEWAY_ALLOWED_HEADERS = [
   'X-Correlation-Id',
   'X-Changed-By',
   'X-Compliance-Actor-Id',
+  'X-User-Id',
+  'X-Actor-Id',
 ] as const;
 
 export function gatewayCorsOptions(config: GatewayConfig): CorsOptions {

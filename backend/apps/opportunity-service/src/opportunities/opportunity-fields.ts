@@ -41,7 +41,7 @@ export const EDITABLE_FIELDS = [
   // On Hold
   'holdReason', 'holdDetails', 'holdUntil',
   // Side panels
-  'stageTasks', 'dealTeam',
+  'stageTasks', 'dealTeam', 'reviews',
 ] as const satisfies readonly (keyof Opportunity)[];
 
 export type EditableField = (typeof EDITABLE_FIELDS)[number];

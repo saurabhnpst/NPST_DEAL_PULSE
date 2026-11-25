@@ -6,7 +6,7 @@ export class GapRequirementDetailDto {
   matrixEntryId: string;
 
   @ApiProperty({ format: 'uuid' })
-  requirementId: string;
+  requirementId: string | null; // null for a custom matrix row
 
   @ApiProperty()
   requirementCode: string;

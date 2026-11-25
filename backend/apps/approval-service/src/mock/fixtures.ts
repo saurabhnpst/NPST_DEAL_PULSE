@@ -33,10 +33,22 @@ const MOCK_BBPS_SCOPE: MockActorScope = {
   productVertical: 'BBPS',
 };
 
+/**
+ * Portal lead approvals: the lead's Product Vertical (TSP / EVOK) with the default team and territory
+ * (teams and territories are not modelled on leads yet — PRD TBD).
+ */
+export const PORTAL_TEAM_ID = 'default';
+export const PORTAL_TERRITORY_ID = 'default';
+const PORTAL_SCOPES: readonly MockActorScope[] = ['TSP', 'EVOK'].map((productVertical) => ({
+  teamId: PORTAL_TEAM_ID,
+  territoryId: PORTAL_TERRITORY_ID,
+  productVertical,
+}));
+
 export const MOCK_ACTOR_SCOPES: Readonly<Record<string, readonly MockActorScope[]>> = {
-  [MOCK_ACTOR_IDS.salesRep]: [MOCK_UPI_SCOPE],
-  [MOCK_ACTOR_IDS.salesManager]: [MOCK_UPI_SCOPE],
-  [MOCK_ACTOR_IDS.pnlHead]: [MOCK_UPI_SCOPE, MOCK_BBPS_SCOPE],
+  [MOCK_ACTOR_IDS.salesRep]: [MOCK_UPI_SCOPE, ...PORTAL_SCOPES],
+  [MOCK_ACTOR_IDS.salesManager]: [MOCK_UPI_SCOPE, ...PORTAL_SCOPES],
+  [MOCK_ACTOR_IDS.pnlHead]: [MOCK_UPI_SCOPE, MOCK_BBPS_SCOPE, ...PORTAL_SCOPES],
   [MOCK_ACTOR_IDS.admin]: [],
 };
 

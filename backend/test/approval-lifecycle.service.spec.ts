@@ -1,7 +1,6 @@
 import { ExecutionContext } from '@nestjs/common';
 import { ApprovalLifecycleService } from '../apps/approval-service/src/approvals/approval-lifecycle.service';
 import { InMemoryApprovalRepository } from '../apps/approval-service/src/approvals/in-memory-approval.repository';
-import { ApprovalsController } from '../apps/approval-service/src/approvals/approvals.controller';
 import { DecisionsController } from '../apps/approval-service/src/decisions/decisions.controller';
 import {
   SubmitApprovalInput,
@@ -321,23 +320,16 @@ describe('approval lifecycle', () => {
     assertEqual(parseApproveApprovalInput({ comment: 'ok' }).comment, 'ok', 'comment');
   });
 
+  // request-changes is implemented now ("More work needed"); the decisions recommendation endpoint is still deferred.
   it('returns 501 for deferred endpoints', () => {
     const stub = {} as ApprovalLifecycleService;
-    const approvals = new ApprovalsController(stub);
     const decisions = new DecisionsController(stub);
-    let approvalsFailed = false;
     let decisionsFailed = false;
-    try {
-      approvals.requestChanges();
-    } catch (error: unknown) {
-      approvalsFailed = error instanceof DomainError && error.httpStatus === 501;
-    }
     try {
       decisions.recommendation();
     } catch (error: unknown) {
       decisionsFailed = error instanceof DomainError && error.httpStatus === 501;
     }
-    assertTrue(approvalsFailed, 'request-changes 501');
     assertTrue(decisionsFailed, 'recommendation 501');
   });
 

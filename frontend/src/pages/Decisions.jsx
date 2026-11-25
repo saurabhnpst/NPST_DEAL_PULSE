@@ -2,11 +2,20 @@ import { useState } from 'react';
 import { Link } from '../router.jsx';
 import { useAuth } from '../store/Auth.jsx';
 import { useStore } from '../store/Store.jsx';
+import { useBusinessData } from '../store/BusinessData.jsx';
+import { decide } from '../services/workflowService.js';
 import { Badge, ReadOnlyNote } from '../components/ui.jsx';
 
 export default function Decisions() {
   const { user, can, readOnly } = useAuth();
-  const { state, dispatch } = useStore();
+  const { state } = useStore();
+  const { reloadWorkflow } = useBusinessData();
+  const [err, setErr] = useState('');
+  // first valid decision wins (backend returns 409 if someone already decided)
+  const record = async (v) => {
+    setErr('');
+    try { await decide(sel.id, v, note); setNote(''); await reloadWorkflow(); } catch (e) { setErr(e?.message || 'Decision failed'); }
+  };
   const items = state.decisions;
   const [selId, setSelId] = useState(items[0]?.id);
   const [note, setNote] = useState('');
@@ -62,8 +71,9 @@ export default function Decisions() {
                 <>
                   <label className="fl">Comments (reason required for Reject)<textarea className="in ta" rows={2} value={note} placeholder="What should the deal team know?" onChange={(e) => setNote(e.target.value)} /></label>
                   <div className="row gap8">
-                    <button className="btn-p" onClick={() => dispatch({ type: 'DECIDE', id: sel.id, v: 'Proceed', note, who: user.name })}>Proceed</button>
-                    <button className="btn-d" disabled={!note} onClick={() => dispatch({ type: 'DECIDE', id: sel.id, v: 'Reject', note, who: user.name })}>Reject</button>
+                    <button className="btn-p" onClick={() => record('Proceed')}>Proceed</button>
+                    <button className="btn-d" disabled={!note} onClick={() => record('Reject')}>Reject</button>
+                    {err && <p className="err s13" role="alert">{err}</p>}
                   </div>
                 </>
               )}

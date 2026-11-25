@@ -20,18 +20,23 @@ import {
   parseListApprovalsQuery,
   parseReassignApprovalInput,
   parseRejectApprovalInput,
+  parseRequestChangesInput,
   parseSubmitApprovalInput,
 } from '../dto/approval.dto';
 import { Actor } from '../mock/actor.decorator';
 import { ActorContextRequest, MockActor } from '../mock/actor.types';
 import { MockActorGuard } from '../mock/mock-actor.guard';
 import { headerValue } from '../shared/http';
-import { notImplementedError } from '../shared/errors';
+import { LeadClient } from '../shared/lead-client';
+import { Decision } from '../decisions/decision.types';
 
 @Controller('approvals')
 @UseGuards(MockActorGuard)
 export class ApprovalsController {
-  constructor(private readonly lifecycle: ApprovalLifecycleService) {}
+  constructor(
+    private readonly lifecycle: ApprovalLifecycleService,
+    private readonly leads: LeadClient,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -78,18 +83,19 @@ export class ApprovalsController {
 
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
-  approve(
+  async approve(
     @Param('id') id: string,
     @Actor() actor: MockActor,
     @Body() body: unknown,
     @Req() request: ActorContextRequest,
   ) {
-    return this.lifecycle.approve(
+    const decision = await this.lifecycle.approve(
       id,
       actor,
       parseApproveApprovalInput(body),
       this.key(request, id, 'APPROVED'),
     );
+    return this.syncLead(id, actor, decision, request);
   }
 
   @Post(':id/reassign')
@@ -110,24 +116,49 @@ export class ApprovalsController {
 
   @Post(':id/reject')
   @HttpCode(HttpStatus.OK)
-  reject(
+  async reject(
     @Param('id') id: string,
     @Actor() actor: MockActor,
     @Body() body: unknown,
     @Req() request: ActorContextRequest,
   ) {
-    return this.lifecycle.reject(
+    const decision = await this.lifecycle.reject(
       id,
       actor,
       parseRejectApprovalInput(body),
       this.key(request, id, 'REJECTED'),
     );
+    return this.syncLead(id, actor, decision, request);
   }
 
+  /** "More work needed" — lead goes back to Sales with the approver's comment. */
   @Post(':id/request-changes')
-  @HttpCode(HttpStatus.NOT_IMPLEMENTED)
-  requestChanges(): never {
-    throw notImplementedError('Request changes is not implemented');
+  @HttpCode(HttpStatus.OK)
+  async requestChanges(
+    @Param('id') id: string,
+    @Actor() actor: MockActor,
+    @Body() body: unknown,
+    @Req() request: ActorContextRequest,
+  ) {
+    const decision = await this.lifecycle.requestChanges(
+      id,
+      actor,
+      parseRequestChangesInput(body),
+      this.key(request, id, 'CHANGES_REQUESTED'),
+    );
+    return this.syncLead(id, actor, decision, request);
+  }
+
+  /** Apply the decision to the lead in Lead Service, then return the decision. */
+  private async syncLead(
+    id: string,
+    actor: MockActor,
+    decision: Decision,
+    request: ActorContextRequest,
+  ): Promise<Decision> {
+    const approval = await this.lifecycle.getApproval(id, actor);
+    await this.leads.applyDecision(approval.leadId, decision, headerValue(request.headers, 'x-changed-by'));
+    return decision;
   }
 
   private key(request: ActorContextRequest, id: string, outcome: string): string {

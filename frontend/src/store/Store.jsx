@@ -25,6 +25,12 @@ function reducer(state, a) {
   switch (a.type) {
     case 'SET_LEADS':
       return { ...state, leads: a.leads || [] };
+    case 'PATCH_LEAD': // merge API detail into a loaded lead (no history entry)
+      return { ...state, leads: upd(state.leads, a.id, (l) => ({ ...l, ...a.patch })) };
+    case 'SET_WORKFLOW': // decisions, evaluations, synopses, compliance loaded from the API
+      return { ...state, ...a.data };
+    case 'UPSERT_OPP': // replace one opportunity (after a save) or add it
+      return { ...state, opportunities: state.opportunities.some((o) => o.id === a.opp.id) ? state.opportunities.map((o) => (o.id === a.opp.id ? a.opp : o)) : [a.opp, ...state.opportunities] };
     case 'SET_OPPORTUNITIES':
       return { ...state, opportunities: a.opportunities || [] };
     case 'SET_RFPS':

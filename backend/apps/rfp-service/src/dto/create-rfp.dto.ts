@@ -4,6 +4,7 @@ import {
   IsBoolean,
   IsDateString,
   IsIn,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -35,7 +36,8 @@ export class CreateRfpDto {
 
   @ApiPropertyOptional({ format: 'uuid' })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(36) // opportunity public id (OPP-YYYY-NNNNN)
   opportunityId?: string;
 
   @ApiPropertyOptional({ format: 'uuid' })
@@ -126,4 +128,25 @@ export class CreateRfpDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ enum: ['Draft', 'Submitted'] })
+  @IsOptional()
+  @IsIn(['Draft', 'Submitted'])
+  synopsisStatus?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  dealSize?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  context?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  risks?: string;
 }

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
@@ -17,7 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ComplianceAssessmentLine } from '../entities/compliance-assessment-line.entity';
-import { UpdateMatrixEntryDto } from './dto/update-matrix-entry.dto';
+import { AddMatrixEntryDto, UpdateMatrixEntryDto } from './dto/update-matrix-entry.dto';
 import { MatricesService } from './matrices.service';
 
 @ApiTags('Matrix')
@@ -82,5 +83,25 @@ export class MatricesController {
     @Body() dto: UpdateMatrixEntryDto,
   ): Promise<ComplianceAssessmentLine> {
     return this.matricesService.update(assessmentId, entryId, dto);
+  }
+
+  /** Add a custom row to the matrix. */
+  @Post()
+  @HttpCode(HttpStatus.CREATED)
+  add(
+    @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
+    @Body() dto: AddMatrixEntryDto,
+  ): Promise<ComplianceAssessmentLine> {
+    return this.matricesService.addCustom(assessmentId, dto);
+  }
+
+  /** Remove a row (only before sign-off / completion). */
+  @Delete(':entryId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async remove(
+    @Param('assessmentId', ParseUUIDPipe) assessmentId: string,
+    @Param('entryId', ParseUUIDPipe) entryId: string,
+  ): Promise<void> {
+    await this.matricesService.remove(assessmentId, entryId);
   }
 }

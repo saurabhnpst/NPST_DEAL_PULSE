@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { IsOptional, IsUUID, IsString, MaxLength } from 'class-validator';
 import { AssessmentFieldsDto } from './assessment-fields.dto';
 
 export class CreateAssessmentDto extends AssessmentFieldsDto {
@@ -16,6 +16,7 @@ export class CreateAssessmentDto extends AssessmentFieldsDto {
       'Opportunity reference; defaults to configuration opportunityId when omitted',
   })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(36) // opportunity public id (OPP-YYYY-NNNNN)
   opportunityId?: string;
 }

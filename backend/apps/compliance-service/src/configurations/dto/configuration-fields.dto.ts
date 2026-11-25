@@ -24,7 +24,8 @@ export class ConfigurationFieldsDto {
     format: 'uuid',
   })
   @IsOptional()
-  @IsUUID()
+  @IsString()
+  @MaxLength(36) // opportunity public id (OPP-YYYY-NNNNN)
   opportunityId?: string;
 
   @ApiPropertyOptional({

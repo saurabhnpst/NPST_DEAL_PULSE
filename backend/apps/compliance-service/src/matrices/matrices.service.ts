@@ -12,7 +12,7 @@ import { AssessmentsService } from '../assessments/assessments.service';
 import { ConfigurationsService } from '../configurations/configurations.service';
 import { ComplianceAssessmentLine } from '../entities/compliance-assessment-line.entity';
 import { ComplianceAssessment } from '../entities/compliance-assessment.entity';
-import { UpdateMatrixEntryDto } from './dto/update-matrix-entry.dto';
+import { AddMatrixEntryDto, UpdateMatrixEntryDto } from './dto/update-matrix-entry.dto';
 import { AssessmentSignoffGuard } from '../common/services/assessment-signoff.guard';
 
 @Injectable()
@@ -49,7 +49,7 @@ export class MatricesService {
         where: { assessment: { id: assessmentId } },
         relations: { requirement: true },
       });
-      const existingReqIds = new Set(existing.map((l) => l.requirement.id));
+      const existingReqIds = new Set(existing.map((l) => l.requirement?.id).filter(Boolean));
 
       const toCreate: ComplianceAssessmentLine[] = [];
       for (const link of requirementLinks) {
@@ -63,6 +63,8 @@ export class MatricesService {
             requirement,
             requirementCode: requirement.code,
             requirementTitle: requirement.title,
+            criticality: requirement.criticality,
+            category: requirement.category,
             complianceStatus: MatrixComplianceStatus.PENDING,
             sortOrder: link.sortOrder ?? requirement.sortOrder ?? 0,
           }),
@@ -132,6 +134,15 @@ export class MatricesService {
     if (dto.notes !== undefined) {
       line.notes = dto.notes ?? null;
     }
+    if (dto.reviewStatus !== undefined) {
+      line.reviewStatus = dto.reviewStatus;
+    }
+    if (dto.criticality !== undefined) {
+      line.criticality = dto.criticality ?? null;
+    }
+    if (dto.category !== undefined) {
+      line.category = dto.category ?? null;
+    }
     if (dto.reviewerObservations !== undefined) {
       line.reviewerObservations = dto.reviewerObservations ?? null;
     }
@@ -179,6 +190,34 @@ export class MatricesService {
     assessmentId: string,
   ): Promise<ComplianceAssessment> {
     return this.assessmentsService.findOne(assessmentId);
+  }
+
+  /** Add a custom row (not from the requirement library). */
+  async addCustom(assessmentId: string, dto: AddMatrixEntryDto): Promise<ComplianceAssessmentLine> {
+    const assessment = await this.getAssessmentForMatrix(assessmentId);
+    await this.assertMatrixMutable(assessment);
+    const lineRepo = this.dataSource.getRepository(ComplianceAssessmentLine);
+    const count = await lineRepo.count({ where: { assessment: { id: assessmentId } } });
+    return lineRepo.save(lineRepo.create({
+      assessment: { id: assessmentId } as ComplianceAssessment,
+      requirement: null,
+      requirementCode: `CUSTOM-${count + 1}`,
+      requirementTitle: dto.title,
+      criticality: dto.criticality ?? null,
+      category: dto.category ?? null,
+      complianceStatus: dto.complianceStatus ?? MatrixComplianceStatus.PENDING,
+      notes: dto.notes ?? null,
+      reviewStatus: 'Pending',
+      sortOrder: count + 1,
+    }));
+  }
+
+  /** Remove a row while the matrix is still editable (before sign-off / completion). */
+  async remove(assessmentId: string, entryId: string): Promise<void> {
+    const assessment = await this.getAssessmentForMatrix(assessmentId);
+    await this.assertMatrixMutable(assessment);
+    const line = await this.findOne(assessmentId, entryId);
+    await this.dataSource.getRepository(ComplianceAssessmentLine).remove(line);
   }
 
   private async assertMatrixMutable(

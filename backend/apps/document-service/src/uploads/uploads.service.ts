@@ -9,7 +9,7 @@ export class UploadsService {
 
   async upload(file: Express.Multer.File, uploadedBy?: string) {
     const validated = await this.ingestion.validateAndScan(file);
-    const scanStatus = 'CLEAN';
+    const scanStatus = this.ingestion.scanStatusLabel();
     const { document, version } = await this.ingestion.createInitialDocument(
       validated,
       scanStatus,

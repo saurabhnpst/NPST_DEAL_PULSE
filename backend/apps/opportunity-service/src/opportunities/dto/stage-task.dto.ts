@@ -35,6 +35,23 @@ export class StageTaskDto {
   teamsAt?: string;
 }
 
+/** Proposal document review (`reviews[]` in the frontend and the API). */
+export class DocumentReviewDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @MaxLength(255)
+  t: string;
+
+  @IsOptional() @IsString() @MaxLength(32) v?: string;
+  @IsOptional() @IsString() @MaxLength(255) r?: string;
+  @IsOptional() @IsString() @MaxLength(32) due?: string;
+  @IsOptional() @IsString() @MaxLength(64) s?: string;
+  @IsOptional() @IsString() @MaxLength(64) teamsAt?: string;
+}
+
 /** Side panel deal team member (`people[]` in the frontend, `dealTeam` in the API). */
 export class DealTeamMemberDto {
   @IsString()

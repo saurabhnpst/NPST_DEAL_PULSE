@@ -43,3 +43,10 @@ export async function fetchCurrentUser() {
   if (!res.ok) throw new Error(`Profile fetch failed (${res.status})`);
   return res.json();
 }
+
+/** Local user directory (id, name, roles) for owner pickers and showing names. */
+export async function fetchUsers() {
+  const res = await fetch(`${authOrigin()}/api/users`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`User list failed (${res.status})`);
+  return res.json();
+}

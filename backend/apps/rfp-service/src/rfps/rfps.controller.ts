@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -26,12 +27,34 @@ import { PaginatedRfpsResponseDto } from '../dto/paginated-rfps-response.dto';
 import { UpdateRfpDto } from '../dto/update-rfp.dto';
 import { Rfp } from '../entities/rfp.entity';
 import { RfpsService } from './rfps.service';
+import { SynopsisWorkflowService } from './synopsis-workflow.service';
 
 @ApiTags('RFPs')
 @ApiBearerAuth()
 @Controller('rfps')
 export class RfpsController {
-  constructor(private readonly rfpsService: RfpsService) {}
+  constructor(
+    private readonly rfpsService: RfpsService,
+    private readonly synopsis: SynopsisWorkflowService,
+  ) {}
+
+  @Post(':rfpId/accept')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Pre-Sales accepts the RFP synopsis → opportunity created and linked' })
+  accept(
+    @Param('rfpId', ParseUUIDPipe) rfpId: string,
+    @Body() body: { presalesOwnerId?: string },
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.synopsis.accept(rfpId, body?.presalesOwnerId, actorId);
+  }
+
+  @Post(':rfpId/return')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Pre-Sales returns the RFP synopsis to Sales (note required)' })
+  returnToSales(@Param('rfpId', ParseUUIDPipe) rfpId: string, @Body() body: { note?: string }) {
+    return this.synopsis.returnToSales(rfpId, body?.note ?? '');
+  }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -58,10 +81,10 @@ export class RfpsController {
 
   @Get('opportunity/:opportunityId')
   @ApiOperation({ summary: 'List RFPs linked to an opportunity' })
-  @ApiParam({ name: 'opportunityId', format: 'uuid' })
+  @ApiParam({ name: 'opportunityId', description: 'Opportunity public id (OPP-YYYY-NNNNN)' })
   @ApiResponse({ status: 200, type: [Rfp] })
   findByOpportunity(
-    @Param('opportunityId', ParseUUIDPipe) opportunityId: string,
+    @Param('opportunityId') opportunityId: string,
   ) {
     return this.rfpsService.findByOpportunityId(opportunityId);
   }

@@ -14,6 +14,7 @@ import { CreateLeadDto } from './dto/create-lead.dto';
 import { UpdateLeadDto } from './dto/update-lead.dto';
 import { AssessNeedDto } from './dto/assess-need.dto';
 import { LeadLifecycleService } from './lead-lifecycle.service';
+import { LeadApprovalStage } from '../common/constants/lead-lifecycle.constants';
 
 const LEAD_DATE_FIELDS = [
   'stage1Entered',
@@ -127,6 +128,10 @@ export class LeadsService {
 
   async approveLead(id: string, changedBy?: string): Promise<Lead> {
     const lead = await this.findOne(id);
+    // Safe to repeat (approval-service retries the sync after a failure).
+    if (lead.approvalStage === LeadApprovalStage.APPROVED && (lead.convertedOpportunityId || lead.rfpInvolved)) {
+      return lead;
+    }
     const before = pickWritableLeadSnapshot(lead as unknown as Record<string, unknown>);
     await this.lifecycleService.markQualifiedAfterApproval(lead, changedBy);
     const saved = await this.leadRepo.save(lead);
@@ -139,6 +144,51 @@ export class LeadsService {
       newValue,
       changedBy,
     );
+    return saved;
+  }
+
+  async rejectLead(id: string, reason: string, changedBy?: string): Promise<Lead> {
+    const lead = await this.findOne(id);
+    if (lead.approvalStage === LeadApprovalStage.REJECTED) {
+      return lead;
+    }
+    return this.applyApprovalOutcome(lead, 'LEAD_REJECTED', changedBy, () =>
+      this.lifecycleService.markRejectedAfterApproval(lead, reason),
+    );
+  }
+
+  async linkOpportunity(id: string, opportunityId: string, changedBy?: string): Promise<Lead> {
+    const lead = await this.findOne(id);
+    if (lead.convertedOpportunityId) {
+      return lead; // first link wins; never silently overwrite
+    }
+    return this.applyApprovalOutcome(lead, 'LEAD_CONVERTED', changedBy, () => {
+      lead.convertedOpportunityId = opportunityId;
+    });
+  }
+
+  async sendBackLead(id: string, changedBy?: string): Promise<Lead> {
+    const lead = await this.findOne(id);
+    if (lead.approvalStage !== LeadApprovalStage.PENDING) {
+      return lead;
+    }
+    return this.applyApprovalOutcome(lead, 'LEAD_SENT_BACK', changedBy, () =>
+      this.lifecycleService.markSentBackAfterApproval(lead),
+    );
+  }
+
+  private async applyApprovalOutcome(
+    lead: Lead,
+    action: string,
+    changedBy: string | undefined,
+    apply: () => void,
+  ): Promise<Lead> {
+    const before = pickWritableLeadSnapshot(lead as unknown as Record<string, unknown>);
+    apply();
+    const saved = await this.leadRepo.save(lead);
+    const after = pickWritableLeadSnapshot(saved as unknown as Record<string, unknown>);
+    const { oldValue, newValue } = computeDiff(before, after);
+    await this.historyService.record(lead.id, action, oldValue, newValue, changedBy);
     return saved;
   }
 

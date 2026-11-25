@@ -1,37 +1,27 @@
-import { Inject, Injectable, OnModuleDestroy, ServiceUnavailableException } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomBytes, timingSafeEqual } from 'crypto';
-import Redis from 'ioredis';
 import type { AuthServiceConfig, LocalAuthUser } from '../config/auth.config';
 import type { SessionRecord } from '../../../../libs/command-module-auth/src';
 
+/**
+ * Local development session store (in memory, no Redis).
+ * Sessions are lost when auth-service restarts — users simply sign in again.
+ */
 @Injectable()
-export class SessionStoreService implements OnModuleDestroy {
-  private readonly redis: Redis;
+export class SessionStoreService {
+  private readonly sessions = new Map<string, SessionRecord>();
   private readonly cfg: AuthServiceConfig;
 
   constructor(@Inject(ConfigService) config: ConfigService) {
     this.cfg = config.getOrThrow<AuthServiceConfig>('auth');
-    this.redis = new Redis(this.cfg.redisUrl, { maxRetriesPerRequest: 1 });
-  }
-
-  async onModuleDestroy(): Promise<void> {
-    try {
-      await this.redis.quit();
-    } catch {
-      this.redis.disconnect();
-    }
-  }
-
-  private key(sessionId: string): string {
-    return `sess:${sessionId}`;
   }
 
   async createSession(user: LocalAuthUser): Promise<{ sessionId: string; csrfToken: string }> {
     const sessionId = randomBytes(24).toString('hex');
     const csrfToken = randomBytes(24).toString('hex');
     const now = Date.now();
-    const record: SessionRecord = {
+    this.sessions.set(sessionId, {
       schemaVersion: 1,
       userId: user.username,
       tenantId: user.tenantId ?? 'local',
@@ -40,55 +30,34 @@ export class SessionStoreService implements OnModuleDestroy {
       csrfToken,
       idleExpiresAt: new Date(now + this.cfg.sessionIdleMs).toISOString(),
       absoluteExpiresAt: new Date(now + this.cfg.sessionAbsoluteMs).toISOString(),
-    };
-    const ttlSec = Math.ceil(this.cfg.sessionAbsoluteMs / 1000);
-    try {
-      await this.redis.set(this.key(sessionId), JSON.stringify(record), 'EX', ttlSec);
-    } catch {
-      throw new ServiceUnavailableException('Session store unavailable');
-    }
+    });
     return { sessionId, csrfToken };
   }
 
   async readSession(sessionId: string | undefined): Promise<SessionRecord | null> {
     if (!sessionId) return null;
-    let raw: string | null;
-    try {
-      raw = await this.redis.get(this.key(sessionId));
-    } catch {
-      throw new ServiceUnavailableException('Session store unavailable');
-    }
-    if (!raw) return null;
-    const record = JSON.parse(raw) as SessionRecord;
+    const record = this.sessions.get(sessionId);
+    if (!record) return null;
     const now = Date.now();
     if (
       now >= new Date(record.absoluteExpiresAt).getTime() ||
       now >= new Date(record.idleExpiresAt).getTime()
     ) {
+      this.sessions.delete(sessionId);
       return null;
     }
     return record;
   }
 
   async touchSession(sessionId: string, record: SessionRecord): Promise<void> {
-    const refreshed = {
+    this.sessions.set(sessionId, {
       ...record,
       idleExpiresAt: new Date(Date.now() + this.cfg.sessionIdleMs).toISOString(),
-    };
-    const ttlSec = Math.max(
-      1,
-      Math.ceil((new Date(refreshed.absoluteExpiresAt).getTime() - Date.now()) / 1000),
-    );
-    await this.redis.set(this.key(sessionId), JSON.stringify(refreshed), 'EX', ttlSec);
+    });
   }
 
   async destroySession(sessionId: string | undefined): Promise<void> {
-    if (!sessionId) return;
-    try {
-      await this.redis.del(this.key(sessionId));
-    } catch {
-      throw new ServiceUnavailableException('Session store unavailable');
-    }
+    if (sessionId) this.sessions.delete(sessionId);
   }
 
   static passwordsMatch(given: string, expected: string): boolean {

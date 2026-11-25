@@ -27,12 +27,13 @@ export class ComplianceAssessmentLine {
   @JoinColumn({ name: 'assessment_id' })
   assessment: ComplianceAssessment;
 
+  /** Library requirement; null for a custom row added on the matrix. */
   @ManyToOne(() => ComplianceRequirement, {
-    nullable: false,
+    nullable: true,
     onDelete: 'RESTRICT',
   })
   @JoinColumn({ name: 'requirement_id' })
-  requirement: ComplianceRequirement;
+  requirement: ComplianceRequirement | null;
 
   @Column({ name: 'requirement_code', type: 'varchar', length: 64 })
   requirementCode: string;
@@ -53,6 +54,18 @@ export class ComplianceAssessmentLine {
 
   @Column({ name: 'reviewer_observations', type: 'text', nullable: true })
   reviewerObservations: string | null;
+
+  /** SME review of this row: Pending / Approved. */
+  @Column({ name: 'review_status', type: 'varchar', length: 16, default: 'Pending' })
+  reviewStatus: string;
+
+  /** M (mandatory) / S (supporting) — copied from the requirement or set on a custom row. */
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  criticality: string | null;
+
+  /** Owning team (Product, Security, Legal, …). */
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  category: string | null;
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;

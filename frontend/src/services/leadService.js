@@ -16,5 +16,15 @@ export const leadService = {
   moveToWorking: (id) => call(endpoints.lead(id) + '/working', { method: 'POST', body: '{}' }),
   assessNeed: (id, payload) =>
     call(endpoints.lead(id) + '/assess-need', { method: 'POST', body: JSON.stringify(payload) }),
-  approve: (id) => call(endpoints.lead(id) + '/approve', { method: 'POST', body: '{}' }),
+  /** Save BANT answers (qualification record is created on first save). */
+  saveQualification: async (id, payload) => {
+    const path = endpoints.lead(id) + '/qualification';
+    try {
+      return await call(path, { method: 'PATCH', body: JSON.stringify(payload) });
+    } catch (e) {
+      if (e?.status !== 404) throw e;
+      return call(path, { method: 'POST', body: JSON.stringify(payload) });
+    }
+  },
+  qualification: (id) => call(endpoints.lead(id) + '/qualification'),
 };

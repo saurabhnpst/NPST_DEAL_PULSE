@@ -6,6 +6,7 @@ import { PdfProcessingModule } from '../pdf-processing/pdf-processing.module';
 import { Rfp } from '../entities/rfp.entity';
 import { RfpsController } from './rfps.controller';
 import { RfpsService } from './rfps.service';
+import { SynopsisWorkflowService } from './synopsis-workflow.service';
 
 @Module({
   imports: [
@@ -15,6 +16,6 @@ import { RfpsService } from './rfps.service';
     InformationExtractionModule,
   ],
   controllers: [RfpsController],
-  providers: [RfpsService],
+  providers: [RfpsService, SynopsisWorkflowService],
 })
 export class RfpsModule {}
