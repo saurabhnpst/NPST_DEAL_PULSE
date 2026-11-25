@@ -111,7 +111,7 @@ export default function Compliance() {
               <tbody>
                 {evidence.map((c) => (
                   <tr key={c.id}>
-                    <td className="w500" style={{ color: '#0B6E66' }}>{c.ev}</td>
+                    <td className="w500" style={{ color: '#214C98' }}>{c.ev}</td>
                     <td>{c.name}</td>
                     <td>{oppById(c.oppId)?.account || c.oppId}</td>
                     <td><Badge>{c.rev}</Badge></td>
@@ -159,7 +159,7 @@ function ProjectCard({ p, onOpen, completed }) {
         <Badge tone={p.teams.length && p.smeDone === p.teams.length ? 'green' : 'amber'}>SME {p.smeDone}/{p.teams.length || 0}</Badge>
       </div>
       <div className="row between s12 muted" style={{ marginTop: 4 }}><span>Completion</span><span>{p.pct}%</span></div>
-      <div className="proj-bar"><div style={{ width: p.pct + '%', background: completed ? '#146A41' : '#2F5FB5' }} /></div>
+      <div className="proj-bar"><div style={{ width: p.pct + '%', background: completed ? '#168A70' : '#284FBC' }} /></div>
       <div className="s12 muted">{completed ? `Signed off ${p.meta.signedOff} · ${p.meta.signedBy}` : `Updated ${p.meta.updated ? fmtDate(p.meta.updated) : '—'}`}</div>
       <button className="btn-p proj-open" onClick={onOpen}>{completed ? 'View matrix' : 'Open workspace'}</button>
     </article>
@@ -210,7 +210,7 @@ function Workspace({ p, src, setSrc, can, user, dispatch, say, teams, onBack }) 
               <span>Asked in RFP <b>{p.rows.filter((c) => c.kind === 'M').length}</b></span>
               <span>Added by system <b>{p.rows.filter((c) => c.kind === 'S').length}</b></span>
             </div>
-            <div className="bar" style={{ height: 10 }}><div style={{ height: 10, width: p.pct + '%', background: '#146A41' }} /></div>
+            <div className="bar" style={{ height: 10 }}><div style={{ height: 10, width: p.pct + '%', background: '#168A70' }} /></div>
             <Stepper label="Compliance progress" steps={STEPS} current={step} />
             <p className="s12 muted" style={{ margin: 0 }}>{STEPS[step]} · {p.pending ? `${p.pending} line${p.pending > 1 ? 's' : ''} awaiting expert review` : 'all lines decided'}</p>
             {can.approveCompliance && !locked && p.approved === p.total && (

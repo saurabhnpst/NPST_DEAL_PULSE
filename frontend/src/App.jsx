@@ -28,8 +28,9 @@ const ROUTES = [
 ];
 
 function Routed() {
-  const { vertical } = useAuth();
+  const { vertical, booting } = useAuth();
   const { pathname } = useLocation();
+  if (booting) return null;
   if (!vertical) return <Login />;
   let Page = Dashboard;
   let params = {};

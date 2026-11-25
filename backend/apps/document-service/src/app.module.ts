@@ -14,6 +14,9 @@ import { HealthController } from './health.controller';
 import { StorageModule } from './storage/storage.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { VersionsModule } from './versions/versions.module';
+import { DealplusAuthModule } from '../../../libs/common/src/auth/dealplus-auth.module';
+import commandModuleConfig from '../../../libs/common/src/config/command-module.config';
+import { serviceEnvFile } from '../../../libs/common/src/config/service-env';
 
 @Module({
 
@@ -31,9 +34,11 @@ import { VersionsModule } from './versions/versions.module';
 
       isGlobal: true,
 
-      envFilePath: resolve(process.cwd(), '.env'),
+      envFilePath: serviceEnvFile('document-service'),
+      load: [commandModuleConfig],
 
     }),
+    DealplusAuthModule.register(),
 
     TypeOrmModule.forRootAsync({
 

@@ -3,7 +3,7 @@ import { seedLeads, seedOpportunities, seedSynopses, seedDecisions, seedComplian
 import { stageMeta } from '../data/defaults.js';
 import { OPP_EXTRAS } from '../data/oppExtras.js';
 
-const KEY = 'dealplus-demo-v10'; // bumped: new fields (lead approval comments, emails, hold/fallback, compliance sign-off)
+const KEY = 'dealpulse-demo-v14'; // renamed to DealPulse
 
 const initial = () => ({
   leads: seedLeads,

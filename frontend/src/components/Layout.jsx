@@ -3,6 +3,7 @@ import { useAuth } from '../store/Auth.jsx';
 import { useStore } from '../store/Store.jsx';
 import { NAV_ITEMS, VERTICALS } from '../data/verticals.js';
 import { TeamsToasts } from './Teams.jsx';
+import BrandLockup from './Brand.jsx';
 
 export default function Layout({ children }) {
   const { vertical, user, logout, switchTo } = useAuth();
@@ -15,7 +16,7 @@ export default function Layout({ children }) {
   return (
     <div className="shell">
       <aside className="side">
-        <div className="brand"><div className="logo">D</div><div>DealPlus</div></div>
+        <div className="brand"><BrandLockup /></div>
         <div className="vtag">{vertical.label}</div>
         <nav aria-label="Workflow" className="navgroup">
           <div className="navlabel">Workflow</div>
@@ -33,7 +34,7 @@ export default function Layout({ children }) {
       <main className="main">
         <header className="topbar">
           <label className="search">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5B6472" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
             <span className="sr">Search</span>
             <input type="search" placeholder="Search leads, opportunities, banks"
               onKeyDown={(e) => { if (e.key === 'Enter' && e.currentTarget.value) nav('/opportunities?q=' + encodeURIComponent(e.currentTarget.value)); }} />

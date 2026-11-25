@@ -2,9 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/compliance-service"
+    "outDir": "../../dist/apps/compliance-service",
+    "rootDir": "../.."
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../libs/**/*.ts"
   ]
 }

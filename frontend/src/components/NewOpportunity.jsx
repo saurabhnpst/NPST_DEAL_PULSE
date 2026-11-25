@@ -22,8 +22,12 @@ const fromLeadFields = (l) => ({
   industry: l.industry || 'Banking', subIndustry: l.subIndustry || '', industryRemark: l.industryRemark || '',
   currentVolume: l.currentVolume || '', yearlyVolumeProjection: l.yearlyVolumeProjection || '',
   spocFirstName: l.spocFirstName || l.firstName || '', spocLastName: l.spocLastName || l.lastName || '',
-  region: l.country && l.country !== 'India' ? 'International' : 'Domestic'
+  region: l.country && l.country !== 'India' ? 'International' : 'Domestic',
+  // non-RFP lead: no Pre-Sales / Solution; Sales owns every stage from Qualification onwards
+  ...(l.rfp ? {} : { presales: '—', skipPresales: true })
 });
+/** Undo the non-RFP setup when the tagged lead changes to an RFP lead or is removed. */
+const RFP_PATH = { presales: 'Vikram N.', skipPresales: false };
 
 export default function NewOpportunity({ onClose, onCreated, fromLead }) {
   const { user } = useAuth();
@@ -31,7 +35,7 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
   const owner = TEAM.includes(user.name) ? user.name : 'Priya S.';
   const requireLead = !fromLead;
   const [v, setV] = useState(() => defaultOpportunity({ name: owner }, fromLead ? {
-    ...fromLeadFields(fromLead), owner: TEAM.includes(fromLead.owner) ? fromLead.owner : owner, presales: 'Vikram N.'
+    presales: 'Vikram N.', ...fromLeadFields(fromLead), owner: TEAM.includes(fromLead.owner) ? fromLead.owner : owner
   } : { leadId: '' }));
   const [tagged, setTagged] = useState(fromLead || null);
   const [err, setErr] = useState('');
@@ -45,11 +49,11 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
 
   const tagLead = (lead) => {
     setTagged(lead);
-    setV((prev) => ({ ...prev, ...fromLeadFields(lead), owner: TEAM.includes(lead.owner) ? lead.owner : prev.owner }));
+    setV((prev) => ({ ...prev, ...(lead.rfp && prev.skipPresales ? RFP_PATH : {}), ...fromLeadFields(lead), owner: TEAM.includes(lead.owner) ? lead.owner : prev.owner }));
   };
   const clearLead = () => {
     setTagged(null);
-    setV((prev) => ({ ...prev, leadId: '', account: '', leadSource: 'Sales Outbound' }));
+    setV((prev) => ({ ...prev, ...(prev.skipPresales ? RFP_PATH : {}), leadId: '', account: '', leadSource: 'Sales Outbound' }));
   };
   const resetSample = () => { setErr(''); setShowErrors(false); setTagged(null); setV(defaultOpportunity({ name: owner }, { leadId: '' })); };
 
@@ -61,15 +65,16 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
   };
 
   return (
-    <Drawer wide title={fromLead ? `Convert lead · ${fromLead.company}` : 'New opportunity'} onClose={onClose} footer={<>
+    <Drawer full title={fromLead ? `Convert lead · ${fromLead.company}` : 'New opportunity'} onClose={onClose} footer={<>
       <button className="btn-p" onClick={save}>{fromLead ? 'Convert and create' : 'Save'}</button>
       {!fromLead && <button className="btn" onClick={resetSample}>Load another sample</button>}
       <button className="btn" onClick={onClose}>Cancel</button>
     </>}>
       <p className="defaults">
         {requireLead
-          ? 'Tag a lead to carry over the account, owner, product, modules, industry, SPOC and lead source. Stage Qualification, currency INR, close date 90 days out, type Hunting, region Domestic and hosting On-premise are pre-filled.'
-          : 'Pre-filled with default values: stage Qualification, owner, currency INR, close date 90 days out, type Hunting, region Domestic, hosting On-premise, plus account, product, modules, industry, SPOC and lead source carried from the lead.'}
+          ? `Tag a lead to carry over the account, owner, product, modules, industry, SPOC and lead source. Stage Qualification, currency INR, close date 90 days out, type Hunting, region Domestic and hosting On-premise are pre-filled.`
+          : `Pre-filled with default values: stage Qualification, owner, currency INR, close date 90 days out, type Hunting, region Domestic, hosting On-premise, plus account, product, modules, industry, SPOC and lead source carried from the lead.`}
+        {v.skipPresales && ' Non-RFP lead: no Pre-Sales owner — Sales handles every stage, and Pre-Sales / Solution cannot edit it.'}
       </p>
       {err && <p className="err" role="alert">{err}</p>}
 
@@ -97,7 +102,9 @@ export default function NewOpportunity({ onClose, onCreated, fromLead }) {
       <div className="sec">Opportunity details</div>
       <div className="grid2">
         <Input label="Opportunity Name" required value={v.name} error={errFor('name')} onChange={f('name')} note="Defaults to product · company on tagging" />
-        <Select label="Pre-Sales owner" value={v.presales} onChange={f('presales')} options={PRESALES} />
+        {v.skipPresales
+          ? <Input label="Pre-Sales owner" value="— · not needed for a non-RFP lead" readOnly />
+          : <Select label="Pre-Sales owner" value={v.presales} onChange={f('presales')} options={PRESALES} />}
         <Select label="Stage" required value={v.stage} error={errFor('stage')} onChange={f('stage')} options={OPEN_STAGES} note={`Probability ${meta.prob}% · Forecast ${meta.forecast}`} />
         <Input label="Expected close date" required type="date" value={v.closeDate} error={errFor('closeDate')} onChange={f('closeDate')} note="Must be a future date" />
       </div>

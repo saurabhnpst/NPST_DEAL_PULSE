@@ -3,9 +3,10 @@
   "compilerOptions": {
     "declaration": false,
     "outDir": "../../dist/apps/lead-service",
-    "rootDir": "src"
+    "rootDir": "../.."
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../libs/**/*.ts"
   ]
 }

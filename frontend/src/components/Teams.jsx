@@ -28,7 +28,7 @@ export function useTeams() {
   const { dispatch } = useStore();
   const { user } = useAuth();
   return (to, text, opts = {}) => {
-    const msg = { id: 'T' + Date.now() + Math.random().toString(36).slice(2, 6), to, text, by: user?.name || 'DealPlus', at: stamp(), time: time(), fresh: true, ...opts };
+    const msg = { id: 'T' + Date.now() + Math.random().toString(36).slice(2, 6), to, text, by: user?.name || 'DealPulse', at: stamp(), time: time(), fresh: true, ...opts };
     dispatch({ type: 'TEAMS_SEND', msg });
     return msg;
   };

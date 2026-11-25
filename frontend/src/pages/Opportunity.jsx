@@ -145,7 +145,10 @@ export default function Opportunity() {
   if (!raw) return <div className="panel empty"><h1 className="h1">Opportunity not found</h1><Link to="/opportunities">Back to opportunities</Link></div>;
 
   const opp = withExtras(raw);
-  const inBand = (can.editOppEarly && EARLY_STAGES.includes(opp.stage)) || (can.editOppLate && LATE_STAGES.includes(opp.stage));
+  const inBand = opp.skipPresales
+    ? !!can.editOppLate // non-RFP deal: Sales owns every stage (Qualification → Negotiation); Pre-Sales / Solution can't edit
+    : (can.editOppEarly && EARLY_STAGES.includes(opp.stage)) || (can.editOppLate && LATE_STAGES.includes(opp.stage));
+  const presalesCan = can.createEval && !opp.skipPresales; // Pre-Sales extras (evaluations, documents) are off for non-RFP deals
   const canEdit = can.editOpp && OPEN_STAGES.includes(opp.stage) && inBand;
   const canCloseDeal = can.editOppLate && CLOSEABLE_STAGES.includes(opp.stage);
   const editing = !!form && canEdit;
@@ -247,9 +250,10 @@ export default function Opportunity() {
         </>}>
           <div className="col gap12">
             <div className="grid2">
-              <label className="fl">Outcome *<select className="in" value={closing.to} onChange={(e) => setClosing({ ...closing, to: e.target.value })}><option>Closed Won</option><option>Closed Lost</option><option>No Bid</option><option>On Hold</option></select></label>
+              {/* "Put on hold" is its own dialog; "Close deal" only offers closing outcomes */}
+              {!isHold(closing) && <label className="fl">Outcome *<select className="in" value={closing.to} onChange={(e) => setClosing({ ...closing, to: e.target.value })}><option>Closed Won</option><option>Closed Lost</option><option>No Bid</option></select></label>}
               {closing.to === 'Closed Lost' && <label className="fl">Lost Reason *<select className="in" value={closing.reason} onChange={(e) => setClosing({ ...closing, reason: e.target.value })}><option value="">Choose…</option>{LOST_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>}
-              {isHold(closing) && <label className="fl">Hold Reason *<select className="in" value={closing.holdReason} onChange={(e) => setClosing({ ...closing, holdReason: e.target.value })}><option value="">--None--</option>{HOLD_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>}
+              {isHold(closing) && <label className="fl" style={{ gridColumn: '1 / -1' }}>Hold Reason *<select className="in" value={closing.holdReason} onChange={(e) => setClosing({ ...closing, holdReason: e.target.value })}><option value="">--None--</option>{HOLD_REASONS.map((r) => <option key={r}>{r}</option>)}</select></label>}
               {closing.to === 'Closed Lost' && <label className="fl" style={{ gridColumn: '1 / -1' }}>Lost Reason Remark<input className="in" value={closing.remark} placeholder="e.g. Lead transferred to another team" onChange={(e) => setClosing({ ...closing, remark: e.target.value })} /></label>}
             </div>
             {closing.to === 'Closed Won' && (
@@ -284,11 +288,11 @@ export default function Opportunity() {
       <div className="opp-grid">
         <div className="col gap16" style={{ minWidth: 0 }}>
           {tab === 'Details' && <DetailsTab v={v} opp={opp} editing={editing} canEdit={canEdit} setForm={setForm} save={save} startEdit={startEdit} missing={missing} openStageTasks={openStageTasks} idx={idx} advance={advance} focus={focus} />}
-          {tab === 'Pre-PO evaluation' && <PrePoTab opp={opp} canEdit={canEdit || can.createEval} say={say} />}
+          {tab === 'Pre-PO evaluation' && <PrePoTab opp={opp} canEdit={canEdit || presalesCan} say={say} />}
           {tab === 'RFP & compliance' && <RfpTab opp={opp} />}
           {tab === 'Proposal & decision' && <DecisionTab opp={opp} canEdit={canEdit} patch={patch} say={say} />}
           {tab === 'Commercials & PO' && <CommercialsTab opp={opp} canEdit={canEdit} patch={patch} say={say} />}
-          {tab === 'Documents' && <DocumentsTab opp={opp} canEdit={canEdit || can.createEval} patch={patch} say={say} />}
+          {tab === 'Documents' && <DocumentsTab opp={opp} canEdit={canEdit || presalesCan} patch={patch} say={say} />}
           {tab === 'History' && <HistoryTab opp={opp} canEdit={canEdit} patch={patch} />}
         </div>
         <SidePanels opp={opp} canEdit={canEdit} patch={patch} nav={nav} />
@@ -429,7 +433,7 @@ function Fy27({ v, editing, set }) {
 
 function StageActions({ g, idx, editing, save, startEdit, advance, missing }) {
   const next = OPEN_STAGES[g.stage + 1];
-  if (g.stage < idx) return <div className="stage-actions s13" style={{ color: '#146A41' }}>✓ Stage complete</div>;
+  if (g.stage < idx) return <div className="stage-actions s13" style={{ color: '#168A70' }}>✓ Stage complete</div>;
   if (g.stage > idx) return <div className="stage-actions s13 muted">Unlocks after {OPEN_STAGES[g.stage - 1]} is complete.{editing ? ' You can fill these fields now; they are saved with “Save”.' : ''}</div>;
   return (
     <div className="stage-actions">
@@ -467,7 +471,7 @@ function FallbackPanel({ opp, canAct, say }) {
         {canAct && !f && <button className="btn-p" onClick={() => setF(blank)}>+ Define fallback</button>}
       </div>
       {f && (
-        <div className="col gap10" style={{ background: '#F6F7F9', borderRadius: 8, padding: 14 }}>
+        <div className="col gap10" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
           <label className="fl">Fallback plan *<textarea className="in ta" rows={2} placeholder="e.g. Offer a phased rollout starting with the AA module in Q1" value={f.plan} onChange={(e) => setF({ ...f, plan: e.target.value })} /></label>
           <div className="grid2">
             <label className="fl">Suggestion<textarea className="in ta" rows={2} placeholder="e.g. Revisit pricing with an opex model" value={f.suggestion} onChange={(e) => setF({ ...f, suggestion: e.target.value })} /></label>
@@ -569,7 +573,7 @@ function PrePoTab({ opp, canEdit, say }) {
       <section className="panel col gap10">
         <div className="row between"><h2 className="h2">Deliverables</h2>{canEdit && !addDl && <button className="btn" onClick={() => setAddDl({ t: '', o: sel.tech !== '—' ? sel.tech : 'Sneha G.', due: plusDays(7), e: 2, s: 'Not started' })}>+ Add deliverable</button>}</div>
         {addDl && (
-          <div className="grid3" style={{ background: '#F6F7F9', borderRadius: 8, padding: 14 }}>
+          <div className="grid3" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
             <label className="fl">Deliverable *<input className="in" value={addDl.t} onChange={(e) => setAddDl({ ...addDl, t: e.target.value })} /></label>
             <label className="fl">Owner<select className="in" value={addDl.o} onChange={(e) => setAddDl({ ...addDl, o: e.target.value })}>{PRESALES.slice(1).map((p) => <option key={p}>{p}</option>)}</select></label>
             <label className="fl">Due<input className="in" type="date" value={addDl.due} onChange={(e) => setAddDl({ ...addDl, due: e.target.value })} /></label>
@@ -635,7 +639,7 @@ function RfpTab({ opp }) {
         {comp.length ? (
           <>
             <p className="muted s14" style={{ margin: 0 }}>{comp.filter((c) => c.kind === 'M').length} asked for in the RFP · {comp.filter((c) => c.kind === 'S').length} added by the system · {ok} of {comp.length} approved by experts.</p>
-            <div className="bar" style={{ height: 10 }}><div style={{ height: 10, width: (ok / comp.length * 100) + '%', background: '#146A41' }} /></div>
+            <div className="bar" style={{ height: 10 }}><div style={{ height: 10, width: (ok / comp.length * 100) + '%', background: '#168A70' }} /></div>
             <div className="row wrap gap8">
               <Badge tone="green">{ok} approved</Badge><Badge tone="amber">{comp.filter((c) => c.rev === 'Pending').length} pending</Badge><Badge tone="red">{comp.filter((c) => c.rev === 'Rejected').length} rejected</Badge>
             </div>
@@ -689,7 +693,7 @@ function DecisionTab({ opp, canEdit, patch, say }) {
           </div>}
         </div>
         {form && (
-          <div className="grid3" style={{ background: '#F6F7F9', borderRadius: 8, padding: 14 }}>
+          <div className="grid3" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
             <label className="fl">Document *<input className="in" list="docnames" value={form.doc} onChange={(e) => setForm({ ...form, doc: e.target.value })} /><datalist id="docnames">{docNames.map((d) => <option key={d} value={d} />)}</datalist></label>
             {form.mode === 'assign' && <>
               <label className="fl">Reviewer *<select className="in" value={form.reviewer} onChange={(e) => setForm({ ...form, reviewer: e.target.value })}>{REVIEWERS.map((r) => <option key={r}>{r}</option>)}</select></label>
@@ -723,7 +727,7 @@ function DecisionTab({ opp, canEdit, patch, say }) {
                 dispatch({ type: 'RECOMMEND', oppId: opp.id, rec: rec.rec, syn: rec.syn, concern: rec.rec === 'No' ? 'Reason for No: ' + rec.reason + (rec.concern ? ' · ' + rec.concern : '') : rec.concern, who: user.name });
                 patch({ recDraft: rec }); say('Sent to P&L Head');
               }}>Send to P&amp;L Head</button>
-              {dec && !dec.done && <span role="status" className="s13" style={{ color: '#146A41' }}>Sent {dec.recBy.split(' · ').slice(1).join(' · ')} to Pushkar B. (P&amp;L Head)</span>}
+              {dec && !dec.done && <span role="status" className="s13" style={{ color: '#168A70' }}>Sent {dec.recBy.split(' · ').slice(1).join(' · ')} to Pushkar B. (P&amp;L Head)</span>}
             </div>
           </>
         ) : <p className="s14" style={{ margin: 0 }}>{dec ? <>Sales recommends <b>{dec.rec}</b> · {dec.recBy}<br /><span className="muted">{dec.syn}</span></> : <span className="muted">No recommendation yet.</span>}</p>}
@@ -738,7 +742,7 @@ function DecisionTab({ opp, canEdit, patch, say }) {
         </div>
         {dec?.done && <p className={dec.done.v === 'Proceed' ? 'ok' : 'err'}><b>{dec.done.v}</b> · {dec.done.note}</p>}
         {dec && !dec.done && can.decide && (
-          <div className="col gap8" style={{ background: '#F6F7F9', borderRadius: 8, padding: 14 }}>
+          <div className="col gap8" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
             <div className="s13 w600">You are the P&amp;L Head</div>
             <textarea className="in ta" rows={2} placeholder="Comments (reason required for Reject)" value={decNote} onChange={(e) => setDecNote(e.target.value)} />
             <div className="row gap8">
@@ -784,7 +788,7 @@ function CommercialsTab({ opp, canEdit, patch, say }) {
           </div>}
         </div>
         {newLine && (
-          <div className="row wrap gap8" style={{ background: '#F6F7F9', borderRadius: 8, padding: 12, alignItems: 'flex-end' }}>
+          <div className="row wrap gap8" style={{ background: '#F7FAFE', borderRadius: 8, padding: 12, alignItems: 'flex-end' }}>
             <label className="fl" style={{ flex: '2 1 220px' }}>Item *<input className="in" value={newLine.t} onChange={(e) => setNewLine({ ...newLine, t: e.target.value })} /></label>
             <label className="fl" style={{ flex: '0 1 90px' }}>Qty<input className="in" type="number" value={newLine.q} onChange={(e) => setNewLine({ ...newLine, q: Number(e.target.value) })} /></label>
             <label className="fl" style={{ flex: '1 1 160px' }}>Unit price (₹)<input className="in" type="number" value={newLine.p} onChange={(e) => setNewLine({ ...newLine, p: Number(e.target.value) })} /></label>
@@ -863,7 +867,7 @@ function DocumentsTab({ opp, canEdit, patch, say }) {
       <div className="tablewrap"><table>
         <thead><tr><th>File</th><th>Type</th><th>Version</th><th>Uploaded</th></tr></thead>
         <tbody>
-          {opp.files.map((f) => <tr key={f.id}><td><span className="w500" style={{ color: '#0B6E66' }}>{f.n}</span></td><td>{f.t}</td><td>{f.v}</td><td className="s13 muted">{f.u}</td></tr>)}
+          {opp.files.map((f) => <tr key={f.id}><td><span className="w500" style={{ color: '#214C98' }}>{f.n}</span></td><td>{f.t}</td><td>{f.v}</td><td className="s13 muted">{f.u}</td></tr>)}
           {opp.files.length === 0 && <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 24 }}>No documents yet.</td></tr>}
         </tbody>
       </table></div>
@@ -881,7 +885,7 @@ function HistoryTab({ opp, canEdit, patch }) {
         {canEdit && !log && <button className="btn" onClick={() => setLog({ kind: 'Call', with: '', note: '' })}>Log call / meeting</button>}
       </div>
       {log && (
-        <div className="grid3" style={{ background: '#F6F7F9', borderRadius: 8, padding: 14 }}>
+        <div className="grid3" style={{ background: '#F7FAFE', borderRadius: 8, padding: 14 }}>
           <label className="fl">Type<select className="in" value={log.kind} onChange={(e) => setLog({ ...log, kind: e.target.value })}><option>Call</option><option>Meeting</option><option>Email</option><option>Note</option></select></label>
           <label className="fl">With<input className="in" placeholder="e.g. A. Kulkarni (bank)" value={log.with} onChange={(e) => setLog({ ...log, with: e.target.value })} /></label>
           <label className="fl" style={{ gridColumn: '1 / -1' }}>Summary *<textarea className="in ta" rows={2} value={log.note} onChange={(e) => setLog({ ...log, note: e.target.value })} /></label>
@@ -915,12 +919,12 @@ function SidePanels({ opp, canEdit, patch }) {
   const idx = OPEN_STAGES.indexOf(opp.stage);
   const miss = idx >= 0 ? missingFor(idx, opp) : [];
   const tracks = [
-    ['Stage gate', idx < 0 ? opp.stage : (miss.length || openStage.length) ? [miss.length ? `${miss.length} field${miss.length > 1 ? 's' : ''}` : '', openStage.length ? `${openStage.length} task${openStage.length > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ') + ' to fill' : 'Ready to complete', idx < 0 || (!miss.length && !openStage.length) ? '#146A41' : '#8A4B00'],
-    ['Pre-PO', ev ? ev.status : 'None', ev ? '#1F4FB8' : '#4A5361'],
-    ['Compliance', comp.length ? `${okC} / ${comp.length} approved` : 'Not started', comp.length && okC === comp.length ? '#146A41' : '#8A4B00'],
-    ['Reviews', opp.reviews.length ? `${okR} of ${opp.reviews.length} approved` : 'None', okR === opp.reviews.length && okR ? '#146A41' : '#8A4B00'],
-    ['P&L decision', dec ? (dec.done ? dec.done.v : 'Pending') : 'Not sent', dec?.done ? (dec.done.v === 'Proceed' ? '#146A41' : '#A3221A') : '#8A4B00'],
-    ['PO', opp.poNumber || opp.poReceived === 'Yes' ? 'Received' : 'Not received', opp.poNumber || opp.poReceived === 'Yes' ? '#146A41' : '#4A5361']
+    ['Stage gate', idx < 0 ? opp.stage : (miss.length || openStage.length) ? [miss.length ? `${miss.length} field${miss.length > 1 ? 's' : ''}` : '', openStage.length ? `${openStage.length} task${openStage.length > 1 ? 's' : ''}` : ''].filter(Boolean).join(' + ') + ' to fill' : 'Ready to complete', idx < 0 || (!miss.length && !openStage.length) ? '#168A70' : '#8A4B00'],
+    ['Pre-PO', ev ? ev.status : 'None', ev ? '#284FBC' : '#475569'],
+    ['Compliance', comp.length ? `${okC} / ${comp.length} approved` : 'Not started', comp.length && okC === comp.length ? '#168A70' : '#8A4B00'],
+    ['Reviews', opp.reviews.length ? `${okR} of ${opp.reviews.length} approved` : 'None', okR === opp.reviews.length && okR ? '#168A70' : '#8A4B00'],
+    ['P&L decision', dec ? (dec.done ? dec.done.v : 'Pending') : 'Not sent', dec?.done ? (dec.done.v === 'Proceed' ? '#168A70' : '#A3221A') : '#8A4B00'],
+    ['PO', opp.poNumber || opp.poReceived === 'Yes' ? 'Received' : 'Not received', opp.poNumber || opp.poReceived === 'Yes' ? '#168A70' : '#475569']
   ];
 
   return (

@@ -51,7 +51,7 @@ export default function EmailPicker({ tagged = [], onTag }) {
               <button type="button" className="btn" aria-label="Close" onClick={() => setOpen(false)}>✕</button>
             </header>
             <input className="in" type="search" autoFocus placeholder="Search sender or subject" aria-label="Search emails" value={q} onChange={(e) => setQ(e.target.value)} />
-            <label className="row gap8 s13"><input type="checkbox" checked={fill} onChange={(e) => setFill(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#0B6E66' }} /> Also fill contact details from the sender</label>
+            <label className="row gap8 s13"><input type="checkbox" checked={fill} onChange={(e) => setFill(e.target.checked)} style={{ width: 16, height: 16, accentColor: '#214C98' }} /> Also fill contact details from the sender</label>
             <ul className="cp-list">
               {list.map((m) => {
                 const on = taggedIds.includes(m.id);

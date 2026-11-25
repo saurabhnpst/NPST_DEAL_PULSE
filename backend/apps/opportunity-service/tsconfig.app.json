@@ -2,9 +2,11 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/opportunity-service"
+    "outDir": "../../dist/apps/opportunity-service",
+    "rootDir": "../.."
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../libs/**/*.ts"
   ]
 }

@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
 
 export const TONES = {
-  gray: { fg: '#4A5361', bg: '#EEF0F3' },
-  blue: { fg: '#1F4FB8', bg: '#E8EFFC' },
-  teal: { fg: '#0B6E66', bg: '#E6F2F0' },
+  gray: { fg: '#475569', bg: '#EDF2F9' },
+  blue: { fg: '#284FBC', bg: '#E2F4FE' },
+  teal: { fg: '#214C98', bg: '#E2F4FE' },
   amber: { fg: '#8A4B00', bg: '#FDF1DC' },
   red: { fg: '#A3221A', bg: '#FDECEA' },
-  green: { fg: '#146A41', bg: '#E5F4EC' }
+  green: { fg: '#168A70', bg: '#E3F5F0' }
 };
 
 const STATUS_TONE = {
@@ -118,15 +118,16 @@ export function Kpi({ label, value, sub, onClick, color }) {
   );
 }
 
-export function Drawer({ title, onClose, children, footer, wide }) {
+/** Side drawer. `full` turns it into a centred, near-full-screen sheet (used for the New lead / opportunity forms). */
+export function Drawer({ title, onClose, children, footer, wide, full }) {
   useEffect(() => {
     const h = (e) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
   }, [onClose]);
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <section className={'drawer' + (wide ? ' wide' : '')} role="dialog" aria-modal="true" aria-label={title}>
+    <div className={'overlay' + (full ? ' center' : '')} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <section className={'drawer' + (wide ? ' wide' : '') + (full ? ' full' : '')} role="dialog" aria-modal="true" aria-label={title}>
         <header className="drawer-h">
           <h2>{title}</h2>
           <button className="btn" aria-label="Close" onClick={onClose}>✕</button>
