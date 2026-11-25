@@ -132,7 +132,7 @@ export default function RfpSynopsis() {
             )}
 
             {can.acceptSynopsis && edit.status === 'Submitted' && (
-              <div className="col gap10" style={{ background: '#F6F7F9', borderRadius: 8, padding: 16 }}>
+              <div className="col gap10" style={{ background: '#F7FAFE', borderRadius: 8, padding: 16 }}>
                 <h3 className="h2">Accept handover</h3>
                 <div className="grid2">
                   <label className="fl">Solutions owner *<select className="in" value={presales} onChange={(e) => setPresales(e.target.value)}><option>Vikram N.</option><option>Sneha G.</option></select></label>

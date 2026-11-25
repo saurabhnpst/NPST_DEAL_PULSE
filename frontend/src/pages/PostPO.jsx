@@ -55,7 +55,7 @@ export default function PostPO() {
           {pos.map(([name, po, d, t]) => (
             <div key={po} className="col gap8">
               <div className="row between gap8"><div><div className="s14 w500">{name}</div><div className="mono s12 muted">{po}</div></div><span className="mono s13">{d} / {t}</span></div>
-              <div className="bar" style={{ height: 8 }}><div style={{ height: 8, width: (d / t * 100) + '%', background: d === t ? '#146A41' : '#0B6E66' }} /></div>
+              <div className="bar" style={{ height: 8 }}><div style={{ height: 8, width: (d / t * 100) + '%', background: d === t ? '#168A70' : '#214C98' }} /></div>
             </div>
           ))}
         </section>

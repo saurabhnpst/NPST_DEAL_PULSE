@@ -1,0 +1,43 @@
+# Local infrastructure for Document Service.
+# S3 API: LocalStack (MinIO Hub images blocked in this environment).
+# MySQL: use your existing provider (Aiven/local) — not started here.
+
+services:
+  localstack:
+    image: localstack/localstack:3
+    container_name: dealpulse-documents-s3
+    environment:
+      SERVICES: s3
+      DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY:-test}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY:-test}
+    ports:
+      - "${MINIO_PORT:-9000}:4566"
+    volumes:
+      - dealpulse_localstack_data:/var/lib/localstack
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  clamav:
+    image: clamav/clamav:latest
+    container_name: dealpulse-documents-clamav
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - dealpulse_clamav_data:/var/lib/clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "echo PING | nc 127.0.0.1 3310 | grep -q PONG || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+volumes:
+  dealpulse_localstack_data:
+  dealpulse_clamav_data:

@@ -63,9 +63,10 @@ const short = (iso) => new Date(iso).toLocaleDateString('en-IN', { day: '2-digit
  * Empty values ('' / null / undefined) also fall back to the default, so every field shows something.
  */
 export function withExtras(o) {
-  const presales = o.presales && o.presales !== '—' ? o.presales : 'Vikram N.';
+  const noPresales = !!o.skipPresales; // non-RFP lead: handled by Sales at every stage, no Pre-Sales owner
+  const presales = noPresales ? '—' : o.presales && o.presales !== '—' ? o.presales : 'Vikram N.';
   const prod = o.productTsp || 'UPI';
-  const people = [{ n: o.owner, r: 'Opportunity owner' }, { n: 'Pushkar B.', r: 'Sales Head / P&L' }, { n: presales, r: 'Pre-Sales' }, { n: 'IT Head', r: `Bank · ${o.account}` }];
+  const people = [{ n: o.owner, r: 'Opportunity owner' }, { n: 'Pushkar B.', r: 'Sales Head / P&L' }, ...(noPresales ? [] : [{ n: presales, r: 'Pre-Sales' }]), { n: 'IT Head', r: `Bank · ${o.account}` }];
   const defaults = {
     // opportunity information
     presales, territory: 'South', leadSource: 'Sales Outbound', convertedFrom: '—',
@@ -95,7 +96,7 @@ export function withExtras(o) {
     nextStep: 'Discovery call with IT head',
     // stage 2 · needs analysis
     economicBuyer: 'GM, Digital Banking', nda: true, strategy: 'Lead on uptime and NPCI certification',
-    presalesInvolved: 'Yes', presalesName: presales, champion: true, championOk: true, reqReceived: 'Yes',
+    presalesInvolved: noPresales ? 'No' : 'Yes', presalesName: noPresales ? '' : presales, champion: true, championOk: true, reqReceived: 'Yes',
     // stage 3 · impact analysis
     ebAligned: 'Yes', ebMet: plusDays(-10), demoDone: true, success: 'Meets target TPS on bank UAT', poc: true, sow: 'Yes',
     // stage 4 · proposal

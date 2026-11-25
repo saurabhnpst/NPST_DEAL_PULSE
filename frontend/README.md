@@ -1,6 +1,6 @@
-# DealPlus — React demo
+# DealPulse — React demo
 
-Front-end demo of the DealPlus design: vertical-based login, leads, RFP synopsis, opportunities, compliance, Pre-PO evaluations, P&L decisions and Post-PO.
+Front-end demo of the DealPulse design: vertical-based login, leads, RFP synopsis, opportunities, compliance, Pre-PO evaluations, P&L decisions and Post-PO.
 No backend — all data lives in the browser (localStorage), so every change you make during the demo sticks until you click **Reset demo data**.
 
 ## Run it
@@ -25,9 +25,9 @@ Pick the vertical on the sign-in screen — email and password are pre-filled. P
 
 | Vertical | Email | Signs in as | Can do |
 |---|---|---|---|
-| Sales | sales@dealplus.demo | Priya S., Sales Manager | Create leads (tag contacts and emails) & opportunities, submit leads for approval, write RFP synopsis, recommend Yes/No to the P&L Head, put deals on hold, define fallback & reopen |
-| P&L Head | plhead@dealplus.demo | Pushkar B., Sales Head & P&L Head | Approve, send back for more work, or reject leads (with reason + comments); decide Proceed / Reject on deals; define fallback & reopen on-hold deals |
-| Solution / Pre-Sales | solution@dealplus.demo | Vikram N., Pre-Sales Manager | Accept/return synopses (creates the opportunity), approve compliance lines and sign off matrices, create & run PoCs/demos |
+| Sales | sales@dealpulse.demo | Priya S., Sales Manager | Create leads (tag contacts and emails) & opportunities, submit leads for approval, approve leads as Sales Manager (either approver's approval is enough), write RFP synopsis, recommend Yes/No to the P&L Head, put deals on hold, define fallback & reopen |
+| P&L Head | plhead@dealpulse.demo | Pushkar B., Sales Head & P&L Head | Approve, send back for more work, or reject leads (with reason + comments); decide Proceed / Reject on deals; define fallback & reopen on-hold deals |
+| Solution / Pre-Sales | solution@dealpulse.demo | Vikram N., Pre-Sales Manager | Accept/return synopses (creates the opportunity), approve compliance lines and sign off matrices, create & run PoCs/demos |
 
 The **“Demo · view as”** dropdown in the top bar switches vertical instantly — handy while presenting.
 Screens a vertical can't use are hidden from its menu and show “No access” if opened directly.
@@ -40,12 +40,19 @@ Screens a vertical can't use are hidden from its menu and show “No access” i
 - **New Pre-PO evaluation** — type PoC, approval Pending, start +7 days, 30-day window, owners from the opportunity.
 - Stage-specific opportunity fields start with defaults (e.g. SOW done = No) and **Mark stage complete** is blocked until required fields are filled.
 
+## Branding (v14)
+
+DealPulse follows the **NPST Brand Book (Aug 2026)**. All colours and fonts come from the `--idb-*` portal theme tokens at the top of `src/styles.css`:
+Core Blue `#01105f` (sidebar, headings, current stage), Core `#214c98` (primary buttons), Bright/Electric Blue (links, focus, charts), Mist Blue `#e2f4fe` (soft backgrounds),
+NPST Turquoise `#29b6c4` (the arrow mark) and Golden Yellow `#fcda00` used sparingly (active nav indicator, active tab, login highlight).
+Fonts: Aptos for body text, Manrope for headings. The NPST arrow mark appears once, as an accent, next to the DealPulse wordmark.
+
 ## What changed in v7 — field specs
 
 Lead and opportunity forms now follow *Lead Information.docx / Lead - Fields.xlsx* and *Opportunity Information.docx / Opportunity Fields.xlsx*.
 
 - **Lead** — sections: Lead Information, Product Description (Product Vertical, Product + multi-select modules, Product TSP 2–4 with modules, Other Remark), SPOC 2 Details, Industry Information, Address Information, Qualification Checks / BANT. Lead-source follow-up fields (Employee / Customer / Partner referral, Event, Others remark). Picklists (lead source, products, modules, industry) come from the sheets.
-- **Lead stages** — 1 New · 2 Working · 3 Unqualified · 4 Nurturing · 5 Qualified. “Do they have a need?” = Yes unlocks *Submit for approval*; P&L approval moves the lead to **Qualified**, then *Convert* creates the opportunity at Stage 1. Unqualified asks for a DisQualification reason + remark.
+- **Lead stages** — 1 New · 2 Working · 3 Unqualified · 4 Nurturing · 5 Qualified. “Do they have a need?” = Yes unlocks *Submit for approval*; the lead goes to both the P&L Head and the Sales Manager (Sales login); one approval from either of them moves it to **Qualified** (if neither approves: any Reject → Unqualified, otherwise → back to Sales for more work). *Convert* then creates the opportunity at Stage 1 · Qualification — for non-RFP leads with **no Pre-Sales owner: Sales handles every stage (Qualification → Negotiation) and Pre-Sales / Solution cannot edit it**. Unqualified asks for a DisQualification reason + remark.
 - **Opportunity** — sections: Opportunity Information (forecast category, region, updated close / PO dates, project start, first billing, SPOC…), Industry Information (industry → sub industry, merchant categories, account size), Product Description (product, modules, solution type, service model, product owner, hosting), Stage 1–5 sections, Stage 6 Closed Won, Stage 7 Closed Lost, On Hold.
 - **Stage 1 · Qualification** — ARR, One Time Fees, calculated Total ARR / Amount (First Year) / TCV, contract duration, billing frequency, tender (Non RFP / RFP / PoC / Empanelment / Proposal), opportunity type (Existing Billing / Farming / Hunting), competition, and **FY27 revenue phasing** (Q1 + monthly Jul 2026–Mar 2027 with quarter totals).
 - **Close deal** — Closed Won asks for PO Date, PO Value, Project Start (Actual), First Billing Date/Value; Closed Lost asks for Lost Reason + Remark; On Hold asks for Hold Reason (Internal / External / Both) + Hold Reason Remarks.

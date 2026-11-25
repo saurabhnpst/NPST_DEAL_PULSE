@@ -15,6 +15,17 @@ temp/
 .env.*
 !.env.example
 !**/.env.example
+!**/.env.*.example
+
+# Per-service secrets (templates above remain tracked)
+backend/apps/*/.env
+frontend/.env
+
+# Database consolidation backups (may contain row data)
+backend/backups/
+
+# Local MinIO binary/data (scripts/start-minio-host.sh)
+backend/.local/
 
 *.pem
 *.key

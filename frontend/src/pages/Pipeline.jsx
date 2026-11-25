@@ -6,7 +6,7 @@ import { STAGES, OPEN_STAGES, PRODUCTS, TERRITORIES, stageMeta, isTender } from 
 import { Badge, Pills, ReadOnlyNote, Toast } from '../components/ui.jsx';
 import NewOpportunity from '../components/NewOpportunity.jsx';
 
-const BAR = ['#8FB3E0', '#6E9AD6', '#4C80C9', '#2F64B5', '#1D4D93', '#146A41', '#A3221A', '#6B7480', '#B7791F'];
+const BAR = ['#8FB3E0', '#6E9AD6', '#4C80C9', '#284FBC', '#1D4D93', '#168A70', '#A3221A', '#6B7480', '#B7791F'];
 const initials = (n) => (n && n !== '—' ? n.split(' ').map((x) => x[0]).join('').replace('.', '') : '—');
 
 export default function Pipeline() {
@@ -63,7 +63,7 @@ export default function Pipeline() {
           <option value="All">Deal size: All</option><option value="CAT 1">CAT 1 &lt; ₹1 Cr</option><option value="CAT 2">CAT 2 ₹1–10 Cr</option><option value="CAT 3">CAT 3 ₹10–50 Cr</option><option value="CAT 4">CAT 4 ₹50–100 Cr</option><option value="CAT 5">CAT 5 &gt; ₹100 Cr</option>
         </select>
         <select className="in sm" aria-label="Owner" value={mine ? 'me' : 'all'} onChange={(e) => setMine(e.target.value === 'me')}><option value="all">Owner: Anyone</option><option value="me">Me</option></select>
-        <label className="row gap8 s14"><input type="checkbox" checked={rfpOnly} onChange={(e) => setRfpOnly(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#0B6E66' }} /> Only with RFP</label>
+        <label className="row gap8 s14"><input type="checkbox" checked={rfpOnly} onChange={(e) => setRfpOnly(e.target.checked)} style={{ width: 18, height: 18, accentColor: '#214C98' }} /> Only with RFP</label>
       </div>
 
       {view === 'Board' ? (

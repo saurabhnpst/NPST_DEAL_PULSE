@@ -1,11 +1,20 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import * as cookieParser from 'cookie-parser';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import {
+  assertRequiredEnv,
+  loadServiceEnv,
+} from '../../../libs/common/src/config/service-env';
 import { AppModule } from './app.module';
+
+loadServiceEnv('lead-service');
+assertRequiredEnv(['DB_HOST', 'DB_USER', 'DB_PASSWORD', 'DB_NAME']);
 import { CHANGED_BY_HEADER } from './common/constants/lead-lifecycle.constants';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(cookieParser());
 
   app.useGlobalPipes(
     new ValidationPipe({

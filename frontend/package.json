@@ -1,7 +1,7 @@
 {
-  "name": "dealplus-demo",
+  "name": "dealpulse-demo",
   "private": true,
-  "version": "11.0.0",
+  "version": "14.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

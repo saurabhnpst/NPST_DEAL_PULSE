@@ -4,6 +4,9 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+import { DealplusAuthModule } from '../../../libs/common/src/auth/dealplus-auth.module';
+import commandModuleConfig from '../../../libs/common/src/config/command-module.config';
+import { serviceEnvFile } from '../../../libs/common/src/config/service-env';
 import { HealthController } from './health.controller';
 import { HistoryModule } from './history/history.module';
 import { LeadsModule } from './leads/leads.module';
@@ -13,8 +16,10 @@ import { QualificationsModule } from './qualifications/qualifications.module';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: resolve(process.cwd(), '.env'),
+      envFilePath: serviceEnvFile('lead-service'),
+      load: [commandModuleConfig],
     }),
+    DealplusAuthModule.register(),
 
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -30,15 +35,16 @@ import { QualificationsModule } from './qualifications/qualifications.module';
         autoLoadEntities: true,
         synchronize: false,
 
-        ssl: {
-          ca: readFileSync(
-            resolve(
-              process.cwd(),
-              config.get<string>('DB_SSL_CA', './ca.pem'),
-            ),
-          ),
-          rejectUnauthorized: true,
-        },
+        ssl: (() => {
+          const sslCa = config.get<string>('DB_SSL_CA');
+          if (!sslCa) {
+            return undefined;
+          }
+          return {
+            ca: readFileSync(resolve(process.cwd(), sslCa)),
+            rejectUnauthorized: true,
+          };
+        })(),
       }),
     }),
 

@@ -3,11 +3,13 @@
   "compilerOptions": {
     "declaration": false,
     "outDir": "../../dist/apps/approval-service",
+    "rootDir": "../..",
     "strict": true,
     "noImplicitAny": true,
     "strictBindCallApply": true
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../libs/**/*.ts"
   ]
 }

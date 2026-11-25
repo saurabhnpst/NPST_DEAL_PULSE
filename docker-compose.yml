@@ -1,44 +1,74 @@
 services:
   mysql:
-    image: mysql:8.4
+    image: mysql:8.0
     container_name: dealplus-mysql
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local_root_change_me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change_me_root}
       MYSQL_USER: ${MYSQL_USER:-dealplus}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local_change_me}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change_me}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-approval_db}
-    ports: ["3306:3306"]
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./infrastructure/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/mysql/init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-local_root_change_me}"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-change_me_root}"]
       interval: 10s
       timeout: 5s
       retries: 10
+      start_period: 30s
+
   rabbitmq:
     image: rabbitmq:3-management
     container_name: dealplus-rabbitmq
     restart: unless-stopped
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-dealplus}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local_change_me}
-    ports: ["5672:5672", "15672:15672"]
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-change_me}
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
   redis:
     image: redis:7-alpine
     container_name: dealplus-redis
     restart: unless-stopped
-    ports: ["6379:6379"]
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   minio:
-    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z
+    image: minio/minio:latest
     container_name: dealplus-minio
+    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dealplus}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local_change_me_123}
-    ports: ["9000:9000", "9001:9001"]
-    volumes: [minio_data:/data]
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change_me_minio}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   mysql_data:
   minio_data:

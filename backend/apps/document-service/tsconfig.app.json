@@ -2,10 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "declaration": false,
-    "outDir": "../../dist/apps/document-service"
+    "outDir": "../../dist/apps/document-service",
+    "rootDir": "../.."
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../libs/**/*.ts"
   ],
   "exclude": [
     "src/**/*.spec.ts"

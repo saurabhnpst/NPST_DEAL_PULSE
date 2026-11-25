@@ -115,7 +115,7 @@ export default function Leads() {
       <div className="s13 muted">Showing {rows.length} of {counts[status]}</div>
 
       {form && (
-        <Drawer wide title="New lead" onClose={() => setForm(null)} footer={<>
+        <Drawer full title="New lead" onClose={() => setForm(null)} footer={<>
           <button className="btn-p" onClick={() => save(false)}>Save</button>
           <button className="btn" onClick={() => save(true)}>Save &amp; New</button>
           <button className="btn" onClick={loadSample}>Load another sample</button>

@@ -46,16 +46,17 @@ export default function Dashboard() {
     todo = [
       ...myDec.filter((d) => d.done).map((d) => ({ kind: d.done.v, t: `P&L Head said ${d.done.v}: ${oppName(d.oppId)}`, s: d.done.note && d.done.note !== '—' ? d.done.note : d.done.at, to: `/opportunities/${d.oppId}`, tone: d.done.v === 'Proceed' ? 'green' : 'red' })),
       ...myDec.filter((d) => !d.done).map((d) => ({ kind: 'Waiting', t: `With P&L Head: ${oppName(d.oppId)}`, s: `You recommended ${d.rec}`, to: `/opportunities/${d.oppId}`, tone: 'amber' })),
-      ...leads.filter((l) => l.owner === user.name && l.approval === 'pending').map((l) => ({ kind: 'Lead', t: `Waiting for P&L Head: ${l.company}`, s: 'Submitted for approval', to: `/leads/${l.id}`, tone: 'blue' })),
-      ...leads.filter((l) => l.owner === user.name && l.approval === 'rework').map((l) => ({ kind: 'Lead', t: `More work needed: ${l.company}`, s: l.approvalLog?.[0]?.comment || 'Update and resubmit', to: `/leads/${l.id}`, tone: 'amber' })),
-      ...leads.filter((l) => l.owner === user.name && l.approval === 'rejected').map((l) => ({ kind: 'Lead', t: `Lead rejected: ${l.company}`, s: l.approvalLog?.[0]?.reason || 'Closed by P&L Head', to: `/leads/${l.id}`, tone: 'red' })),
+      ...leads.filter((l) => l.approval === 'pending' && !l.approvals?.sales).map((l) => ({ kind: 'Approval', t: `Approve lead (Sales Manager): ${l.company}`, s: `${l.firstName} ${l.lastName} · by ${l.owner}`, to: `/leads/${l.id}`, tone: 'amber' })),
+      ...leads.filter((l) => l.owner === user.name && l.approval === 'pending' && l.approvals?.sales).map((l) => ({ kind: 'Lead', t: `Waiting for P&L Head: ${l.company}`, s: 'Submitted for approval', to: `/leads/${l.id}`, tone: 'blue' })),
+      ...leads.filter((l) => l.owner === user.name && l.approval === 'rework').map((l) => ({ kind: 'Lead', t: `More work needed: ${l.company}`, s: l.approvalLog?.find((c) => c.d === 'More work needed')?.comment || 'Update and resubmit', to: `/leads/${l.id}`, tone: 'amber' })),
+      ...leads.filter((l) => l.owner === user.name && l.approval === 'rejected').map((l) => ({ kind: 'Lead', t: `Lead rejected: ${l.company}`, s: l.approvalLog?.find((c) => c.d === 'Rejected')?.reason || 'Closed at approval', to: `/leads/${l.id}`, tone: 'red' })),
       ...onHold.filter((o) => o.owner === user.name).map((o) => ({ kind: 'On hold', t: `Define fallback: ${o.name}`, s: o.holdReason ? `On hold · ${o.holdReason}` : 'On hold', to: `/opportunities/${o.id}`, tone: 'amber' })),
       ...leads.filter((l) => l.owner === user.name && l.approval === 'approved' && l.status === 'Qualified' && !l.oppId).map((l) => ({ kind: 'Lead', t: `Approved — ${l.rfp ? 'write synopsis' : 'convert'}: ${l.company}`, s: `${l.firstName} ${l.lastName}`, to: `/leads/${l.id}`, tone: 'green' })),
       ...synopses.filter((s) => s.status === 'Returned').map((s) => ({ kind: 'Synopsis', t: `Fix returned synopsis: ${s.name}`, s: s.account, to: '/rfp', tone: 'red' }))
     ];
   } else if (k === 'pl') {
     // P&L Head: approvals and decisions
-    const leadAppr = leads.filter((l) => l.approval === 'pending');
+    const leadAppr = leads.filter((l) => l.approval === 'pending' && !l.approvals?.pl); // not yet decided by the P&L Head
     const decided = decisions.filter((d) => d.done);
     kpis = [
       { label: 'Awaiting your decision', value: pendingDec.length, sub: 'Proceed or Reject', to: '/decisions' },
